@@ -1,55 +1,45 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from "@supabase/ssr";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, cookieDomainForHost } from "./env";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://fnwlnevaqxbabnvmxdtq.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZud2xuZXZhcXhiYWJudm14ZHRxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODYyMTksImV4cCI6MjA5NjE2MjIxOX0.ODpjh8_Qb3k4lymsFTu6AApiWwPg0ZZLbykbpI_NGnw';
+/**
+ * Single browser client for the whole app.
+ *
+ * The session is stored in cookies (chunked automatically by @supabase/ssr)
+ * rather than localStorage. In production the cookie domain is
+ * `.calabartastee.com`, so one login works on both calabartastee.com/admin
+ * and admin.calabartastee.com. On localhost / Vercel preview URLs the cookie
+ * is host-only.
+ *
+ * Security comes from Row-Level Security in Postgres, not from this key —
+ * the anon/publishable key is designed to be public.
+ */
+export const supabase = createBrowserClient(
+  SUPABASE_URL || "http://localhost:54321",
+  SUPABASE_ANON_KEY || "missing-anon-key",
+  {
+    cookieOptions: {
+      domain: cookieDomainForHost(),
+      path: "/",
+      sameSite: "lax",
+      secure:
+        typeof window !== "undefined" && window.location.protocol === "https:",
+      maxAge: 60 * 60 * 24 * 30,
+    },
+  }
+);
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const MENU_IMAGES_BUCKET = "menu-images";
 
-export type MenuItem = {
-  id: number;
-  name: string;
-  description: string;
-  price: string;
-  image_path: string;
-  category: string;
-  is_popular: boolean;
-  is_best_seller: boolean;
-  is_spicy: boolean;
-  is_preorder: boolean;
-  dietary: string | null;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export type OpeningHours = {
-  id: number;
-  day: string;
-  day_label: string;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean;
-};
-
-export type Feedback = {
-  id: number;
-  name: string;
-  phone: string | null;
-  email: string;
-  comment: string;
-  status: string;
-  created_at: string;
-};
-
-export type ActivityLog = {
-  id: number;
-  action: string;
-  user_email: string | null;
-  details: string | null;
-  created_at: string;
-};
+/** Turn a Supabase/PostgREST error into a sentence for a toast. */
+export function errorMessage(err: unknown): string {
+  if (!err) return "Something went wrong.";
+  if (typeof err === "string") return err;
+  const e = err as { message?: string; code?: string; details?: string };
+  if (e.code === "23503")
+    return "This is still in use elsewhere (e.g. a category that has menu items).";
+  if (e.code === "23505") return "That name is already taken.";
+  if (e.code === "42501" || /row-level security/i.test(e.message ?? "")) {
+    return "You don't have permission to do that.";
+  }
+  return e.message || "Something went wrong.";
+}
