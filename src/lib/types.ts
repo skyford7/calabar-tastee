@@ -93,7 +93,7 @@ export type ActivityLog = {
 };
 
 export const ROLE_LABEL: Record<AppRole, string> = {
-  dba: "Database Admin",
+  dba: "Database Administrator",
   admin: "Admin",
   staff: "Staff",
 };
