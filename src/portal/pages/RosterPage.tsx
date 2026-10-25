@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,6 @@ import {
   Repeat,
   Palmtree,
   Plus,
-  Send,
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
@@ -91,6 +90,19 @@ export function RosterPage() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["shifts"] });
 
+  // Shifts are always live now: publish any older drafts once.
+  const manageShifts = can.manageShifts;
+  useEffect(() => {
+    if (!manageShifts) return;
+    void supabase
+      .from("shifts")
+      .update({ status: "published" })
+      .eq("status", "draft")
+      .then(({ error }) => {
+        if (!error) void qc.invalidateQueries({ queryKey: ["shifts"] });
+      });
+  }, [manageShifts, qc]);
+
   const people = useMemo(() => {
     const list = directory.data ?? [];
     const withShifts = new Set((shifts.data ?? []).map(s => s.staff_id));
@@ -120,7 +132,6 @@ export function RosterPage() {
     return m;
   }, [shifts.data]);
 
-  const drafts = (shifts.data ?? []).filter(s => s.status === "draft");
 
   const save = useMutation({
     mutationFn: async (d: Draft) => {
@@ -131,7 +142,7 @@ export function RosterPage() {
         end_time: d.end_time,
         position: d.position.trim() || null,
         notes: d.notes.trim() || null,
-        status: d.publish ? "published" : "draft",
+        status: "published",
       };
       if (row.end_time <= row.start_time)
         throw new Error(
@@ -143,13 +154,7 @@ export function RosterPage() {
       if (error) throw error;
     },
     onSuccess: (_r, d) => {
-      toast.success(
-        d.id
-          ? "Shift updated"
-          : d.publish
-            ? "Shift published"
-            : "Draft shift added"
-      );
+      toast.success(d.id ? "Shift updated" : "Shift added");
       setDraft(null);
       void refresh();
     },
@@ -164,23 +169,6 @@ export function RosterPage() {
     onSuccess: () => {
       toast.success("Shift deleted");
       setDraft(null);
-      void refresh();
-    },
-    onError: e => toast.error(errorMessage(e)),
-  });
-
-  const publishWeek = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("shifts")
-        .update({ status: "published" })
-        .eq("status", "draft")
-        .gte("shift_date", monday)
-        .lte("shift_date", sunday);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Roster published — staff can now see this week's shifts");
       void refresh();
     },
     onError: e => toast.error(errorMessage(e)),
@@ -202,37 +190,25 @@ export function RosterPage() {
         .map(s => ({
           ...s,
           shift_date: addDays(s.shift_date, 7),
-          status: "draft" as const,
+          status: "published" as const,
         }));
       const { error: insErr } = await supabase.from("shifts").insert(rows);
       if (insErr) throw insErr;
       return rows.length;
     },
     onSuccess: n => {
-      toast.success(`Copied ${n} shift${n === 1 ? "" : "s"} as drafts`);
+      toast.success(`Copied ${n} shift${n === 1 ? "" : "s"} `);
       void refresh();
     },
     onError: e => toast.error(errorMessage(e)),
   });
-
-  const onPublish = async () => {
-    if (
-      await confirm({
-        title: "Publish this week?",
-        message: `${drafts.length} draft shift${drafts.length === 1 ? "" : "s"} for ${formatDay(monday)} – ${formatDay(sunday)} will become visible to staff.`,
-        confirmLabel: "Publish",
-      })
-    ) {
-      publishWeek.mutate();
-    }
-  };
 
   const onCopy = async () => {
     if (
       await confirm({
         title: "Copy last week's roster?",
         message:
-          "All shifts from last week will be added to this week as drafts. Clashes with existing shifts will stop the copy.",
+          "All shifts from last week will be added to this week. Clashes with existing shifts will stop the copy.",
         confirmLabel: "Copy",
       })
     ) {
@@ -248,7 +224,7 @@ export function RosterPage() {
       end_time: "19:00",
       position: "",
       notes: "",
-      publish: false,
+      publish: true,
     });
 
   const openEdit = (s: Shift) =>
@@ -290,9 +266,7 @@ export function RosterPage() {
           onClick={() => openEdit(s)}
           className={cn(
             "block w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-            s.status === "draft"
-              ? "border border-dashed border-amber-500/50 text-amber-200/80"
-              : "bg-amber-600/25 text-amber-100",
+            "bg-amber-600/25 text-amber-100",
             can.manageShifts && "hover:bg-amber-600/40"
           )}
         >
@@ -307,11 +281,6 @@ export function RosterPage() {
           {s.notes && (
             <div className="truncate opacity-60">
               {s.notes}
-            </div>
-          )}
-          {s.status === "draft" && (
-            <div className="text-[10px] uppercase tracking-wide opacity-70">
-              Draft
             </div>
           )}
         </button>
@@ -335,7 +304,7 @@ export function RosterPage() {
         title="Roster"
         description={
           can.manageShifts
-            ? "Click an empty cell to add a shift. Drafts are only visible to admins until published."
+            ? "Click an empty cell to add a shift. Changes show for everyone straight away."
             : "Published shifts for the whole team. Times are UK time."
         }
         actions={
@@ -353,14 +322,6 @@ export function RosterPage() {
                 loading={copyLastWeek.isPending}
               >
                 <Copy className="h-4 w-4" /> Copy last week
-              </Button>
-              <Button
-                onClick={() => void onPublish()}
-                disabled={!drafts.length}
-                loading={publishWeek.isPending}
-              >
-                <Send className="h-4 w-4" /> Publish
-                {drafts.length ? ` ${drafts.length}` : ""}
               </Button>
             </>
           )
@@ -641,18 +602,6 @@ export function RosterPage() {
                 onChange={e => setDraft({ ...draft, notes: e.target.value })}
               />
             </Field>
-            <div className="sm:col-span-2">
-              <Checkbox
-                label="Published (visible to staff)"
-                checked={draft.publish}
-                onChange={v => setDraft({ ...draft, publish: v })}
-              />
-              {draft.id && draft.publish && (
-                <p className="mt-1 text-xs text-amber-100/40">
-                  Changes to a published shift are visible immediately.
-                </p>
-              )}
-            </div>
             {draft.end_time <= draft.start_time && (
               <div className="sm:col-span-2">
                 <Badge tone="red">End time must be after start time</Badge>

@@ -7,7 +7,7 @@ import { qk } from "@/lib/queries";
 import { addDays, formatDay, londonToday, startOfWeek } from "@/lib/format";
 import type { DirectoryEntry, Shift, TimeOff } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Button, Checkbox, Field, Input, Modal, Select, useConfirm } from "./ui";
+import { Button, Field, Input, Modal, Select, useConfirm } from "./ui";
 
 const dayDiff = (a: string, b: string) =>
   Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
@@ -51,7 +51,6 @@ export function RepeatShiftsModal({
   const [to, setTo] = useState("19:00");
   const [position, setPosition] = useState("");
   const [notes, setNotes] = useState("");
-  const [publish, setPublish] = useState(false);
 
   const who = staff || people[0]?.id || "";
 
@@ -97,7 +96,7 @@ export function RepeatShiftsModal({
           end_time: to,
           position: position.trim() || null,
           notes: notes.trim() || null,
-          status: publish ? "published" : "draft",
+          status: "published",
         }];
       });
       if (!rows.length) throw new Error("Nothing to add: every matching day is a holiday or already has a shift.");
@@ -190,7 +189,6 @@ export function RepeatShiftsModal({
           <Input maxLength={500} value={notes} onChange={e => setNotes(e.target.value)} />
         </Field>
         <div className="sm:col-span-2">
-          <Checkbox label="Publish straight away (visible to staff)" checked={publish} onChange={setPublish} />
           <p className="mt-1 text-xs text-amber-100/40">
             Holidays and days that already have a shift are skipped automatically.
           </p>

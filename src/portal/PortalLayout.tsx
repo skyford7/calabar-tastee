@@ -22,12 +22,14 @@ import { useAuth } from "@/auth/AuthProvider";
 import { SITE_ORIGIN, portalPath } from "@/lib/env";
 import { ROLE_LABEL } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useLiveUpdates } from "@/lib/realtime";
 
 type NavItem = { to: string; label: string; icon: ReactNode; show: boolean };
 
 export function PortalLayout() {
   const { profile, role, can, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  useLiveUpdates(!!profile);
 
   const nav: NavItem[] = [
     {
