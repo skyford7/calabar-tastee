@@ -40,7 +40,7 @@ export function AccountPage() {
             {role && <Badge tone="amber">{ROLE_LABEL[role]}</Badge>}
           </div>
           <form onSubmit={saveDetails} className="space-y-4">
-            <Field label="Username" hint="You sign in with this. Only an Admin or Database Administrator can change it.">
+            <Field label="Username">
               <Input value={profile?.username ?? ""} disabled />
             </Field>
             <Field label="Email (for contact)">

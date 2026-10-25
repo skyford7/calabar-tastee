@@ -138,7 +138,7 @@ export function StaffPage() {
   const [form, setForm] = useState<DetailsForm | null>(null);
   const [credFor, setCredFor] = useState<{ member: TeamMember; cred: Cred } | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
 
   const team = useQuery({
     queryKey: qk.team,
@@ -269,9 +269,7 @@ export function StaffPage() {
       <PageHeader
         title="Staff"
         description={
-          can.manageRoles
-            ? "Create accounts, set passwords or access codes, and manage roles. Only Database Administrators can grant Admin or Database Administrator access."
-            : "Create staff accounts, set passwords or access codes, and suspend accounts."
+"Create accounts, set passwords or access codes, and suspend or reactivate staff."
         }
         actions={
           <Button
@@ -398,7 +396,7 @@ export function StaffPage() {
                     </div>
                   ) : (
                     <div className="text-right text-xs text-amber-100/30">
-                      {m.id === me?.id ? "Edit in My account" : "Database Administrator only"}
+                      {m.id === me?.id ? "You" : ""}
                     </div>
                   )}
                 </td>
@@ -469,7 +467,7 @@ export function StaffPage() {
                 }
               />
             </Field>
-            <Field label="Email (for contact)" hint={form.id ? "Contact the Database Administrator to change." : undefined}>
+            <Field label="Email (for contact)" >
               <Input
                 type="email"
                 required
@@ -487,7 +485,6 @@ export function StaffPage() {
             <Field
               label="Role"
               className="sm:col-span-2"
-              hint={can.manageRoles ? undefined : "Admins can create Staff accounts."}
             >
               <Select
                 value={form.role}

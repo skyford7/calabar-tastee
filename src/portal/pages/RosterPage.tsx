@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Repeat,
+  Palmtree,
   Plus,
   Send,
   Trash2,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/format";
 import type { Shift } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { HolidaysModal, RepeatShiftsModal, offFor, useTimeOff } from "../RosterTools";
 import {
   Badge,
   Button,
@@ -61,7 +64,15 @@ export function RosterPage() {
 
   const days = weekDays(monday);
   const sunday = days[6];
-  const directory = useTeamDirectory();
+  const directoryAll = useTeamDirectory();
+  // Database Administrators are never rostered.
+  const directory = useMemo(
+    () => ({ ...directoryAll, data: (directoryAll.data ?? []).filter(p => p.role !== "dba") }),
+    [directoryAll]
+  );
+  const timeOff = useTimeOff();
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const [holidaysOpen, setHolidaysOpen] = useState(false);
 
   const shifts = useQuery({
     queryKey: qk.shifts(monday, sunday),
@@ -273,6 +284,12 @@ export function RosterPage() {
         actions={
           can.manageShifts && (
             <>
+              <Button variant="secondary" onClick={() => setRepeatOpen(true)}>
+                <Repeat className="h-4 w-4" /> Repeat shifts
+              </Button>
+              <Button variant="secondary" onClick={() => setHolidaysOpen(true)}>
+                <Palmtree className="h-4 w-4" /> Holidays
+              </Button>
               <Button
                 variant="secondary"
                 onClick={() => void onCopy()}
@@ -389,6 +406,7 @@ export function RosterPage() {
                   </td>
                   {days.map(d => {
                     const cell = byCell.get(`${p.id}|${d}`) ?? [];
+                    const off = offFor(timeOff.data ?? [], p.id, d);
                     return (
                       <td
                         key={d}
@@ -398,6 +416,11 @@ export function RosterPage() {
                         )}
                       >
                         <div className="space-y-1">
+                          {off && (
+                            <div className="truncate rounded-md bg-sky-500/15 px-2 py-1.5 text-xs text-sky-200" title={off.reason}>
+                              {off.reason || "Holiday"}
+                            </div>
+                          )}
                           {cell.map(s => (
                             <button
                               key={s.id}
@@ -450,6 +473,20 @@ export function RosterPage() {
           </table>
         </div>
       )}
+
+      <RepeatShiftsModal
+        key={repeatOpen ? "open" : "closed"}
+        open={repeatOpen}
+        onClose={() => setRepeatOpen(false)}
+        people={directory.data ?? []}
+        timeOff={timeOff.data ?? []}
+      />
+      <HolidaysModal
+        open={holidaysOpen}
+        onClose={() => setHolidaysOpen(false)}
+        people={directory.data ?? []}
+        timeOff={timeOff.data ?? []}
+      />
 
       <Modal
         open={!!draft}

@@ -15,8 +15,8 @@ import {
   UtensilsCrossed,
   X,
   ExternalLink,
-  Image as ImageIcon,
   Megaphone,
+  Contact,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { SITE_ORIGIN, portalPath } from "@/lib/env";
@@ -43,6 +43,12 @@ export function PortalLayout() {
       show: true,
     },
     {
+      to: "/team",
+      label: "Team",
+      icon: <Contact className="h-4 w-4" />,
+      show: true,
+    },
+    {
       to: "/roster",
       label: "Roster",
       icon: <CalendarDays className="h-4 w-4" />,
@@ -58,12 +64,6 @@ export function PortalLayout() {
       to: "/categories",
       label: "Categories",
       icon: <Tags className="h-4 w-4" />,
-      show: can.manageMenu,
-    },
-    {
-      to: "/photos",
-      label: "Website photos",
-      icon: <ImageIcon className="h-4 w-4" />,
       show: can.manageMenu,
     },
     {

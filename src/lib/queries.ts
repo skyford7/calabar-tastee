@@ -9,6 +9,7 @@ export const qk = {
   hours: ["opening_hours"] as const,
   team: ["team"] as const,
   directory: ["team_directory"] as const,
+  timeOff: ["time_off"] as const,
   shifts: (from: string, to: string) => ["shifts", from, to] as const,
   feedback: ["feedback"] as const,
   activity: ["activity_logs"] as const,

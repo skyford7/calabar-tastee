@@ -173,7 +173,7 @@ export function LoginPage() {
                 {isCode ? <KeyRound className="h-4 w-4" /> : <Lock className="h-4 w-4" />} Sign in
               </Button>
               <p className="text-center text-xs text-amber-100/40">
-                Forgotten it? Ask your Manager or Database Administrator to reset it.
+                Forgotten it? Ask your manager to reset it.
               </p>
             </form>
           )}

@@ -14,8 +14,8 @@ import { HoursPage } from "./pages/HoursPage";
 import { FeedbackPage } from "./pages/FeedbackPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { AccountPage } from "./pages/AccountPage";
+import { TeamPage } from "./pages/TeamPage";
 import { CenterNetPage } from "./pages/CenterNetPage";
-import { PhotosPage } from "./pages/PhotosPage";
 
 /** Routes are relative, so this works under /admin/* and at the subdomain root. */
 export default function PortalRoutes() {
@@ -28,8 +28,8 @@ export default function PortalRoutes() {
           <Route element={<PortalLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="center-net" element={<CenterNetPage />} />
+            <Route path="team" element={<TeamPage />} />
             <Route path="roster" element={<RosterPage />} />
-            <Route path="photos" element={<PhotosPage />} />
             <Route path="menu" element={<MenuPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route

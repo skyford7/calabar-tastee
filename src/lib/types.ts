@@ -51,6 +51,15 @@ export type DirectoryEntry = {
   full_name: string;
   job_title: string | null;
   role: AppRole;
+  phone?: string | null;
+};
+
+export type TimeOff = {
+  id: number;
+  staff_id: string | null; // null = whole team
+  start_date: string;
+  end_date: string;
+  reason: string;
 };
 
 export type Category = {
