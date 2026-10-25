@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { ROLE_LABEL } from "@/lib/types";
+import { CredentialForm } from "../CredentialForm";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../ui";
 
 export function AccountPage() {
@@ -12,8 +13,6 @@ export function AccountPage() {
     phone: profile?.phone ?? "",
   }));
   const [savingDetails, setSavingDetails] = useState(false);
-  const [pw, setPw] = useState({ next: "", confirm: "" });
-  const [savingPw, setSavingPw] = useState(false);
 
   const saveDetails = async (e: FormEvent) => {
     e.preventDefault();
@@ -21,27 +20,12 @@ export function AccountPage() {
     setSavingDetails(true);
     const { error } = await supabase
       .from("profiles")
-      .update({
-        full_name: details.full_name.trim(),
-        phone: details.phone.trim() || null,
-      })
+      .update({ full_name: details.full_name.trim(), phone: details.phone.trim() || null })
       .eq("id", profile.id);
     setSavingDetails(false);
     if (error) return toast.error(errorMessage(error));
     toast.success("Details saved");
     void refresh();
-  };
-
-  const savePassword = async (e: FormEvent) => {
-    e.preventDefault();
-    if (pw.next.length < 10) return toast.error("Use at least 10 characters.");
-    if (pw.next !== pw.confirm) return toast.error("Passwords don't match.");
-    setSavingPw(true);
-    const { error } = await supabase.auth.updateUser({ password: pw.next });
-    setSavingPw(false);
-    if (error) return toast.error(errorMessage(error));
-    setPw({ next: "", confirm: "" });
-    toast.success("Password changed");
   };
 
   return (
@@ -54,7 +38,10 @@ export function AccountPage() {
             {role && <Badge tone="amber">{ROLE_LABEL[role]}</Badge>}
           </div>
           <form onSubmit={saveDetails} className="space-y-4">
-            <Field label="Email" hint="Ask an admin if this needs to change.">
+            <Field label="Username" hint="You sign in with this. Ask a manager if it needs to change.">
+              <Input value={profile?.username ?? ""} disabled />
+            </Field>
+            <Field label="Email (for contact)">
               <Input value={profile?.email ?? ""} disabled />
             </Field>
             <Field label="Full name">
@@ -62,9 +49,7 @@ export function AccountPage() {
                 required
                 maxLength={120}
                 value={details.full_name}
-                onChange={e =>
-                  setDetails({ ...details, full_name: e.target.value })
-                }
+                onChange={e => setDetails({ ...details, full_name: e.target.value })}
               />
             </Field>
             <Field label="Phone">
@@ -72,9 +57,7 @@ export function AccountPage() {
                 type="tel"
                 maxLength={30}
                 value={details.phone}
-                onChange={e =>
-                  setDetails({ ...details, phone: e.target.value })
-                }
+                onChange={e => setDetails({ ...details, phone: e.target.value })}
               />
             </Field>
             <Button type="submit" loading={savingDetails}>
@@ -84,31 +67,17 @@ export function AccountPage() {
         </Card>
 
         <Card className="p-5">
-          <h2 className="mb-4 font-semibold text-white">Change password</h2>
-          <form onSubmit={savePassword} className="space-y-4">
-            <Field label="New password" hint="At least 10 characters.">
-              <Input
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={10}
-                value={pw.next}
-                onChange={e => setPw({ ...pw, next: e.target.value })}
-              />
-            </Field>
-            <Field label="Confirm new password">
-              <Input
-                type="password"
-                autoComplete="new-password"
-                required
-                value={pw.confirm}
-                onChange={e => setPw({ ...pw, confirm: e.target.value })}
-              />
-            </Field>
-            <Button type="submit" loading={savingPw}>
-              Change password
-            </Button>
-          </form>
+          <h2 className="mb-1 font-semibold text-white">Sign-in</h2>
+          <p className="mb-4 text-sm text-amber-100/50">
+            You currently sign in with{" "}
+            {profile?.login_method === "code" ? `a ${profile.code_length ?? ""}-digit access code` : "a password"}. You can
+            switch at any time.
+          </p>
+          <CredentialForm
+            initialMethod={profile?.login_method ?? "password"}
+            initialLength={profile?.code_length ?? 6}
+            submitLabel="Update sign-in"
+          />
         </Card>
       </div>
     </>

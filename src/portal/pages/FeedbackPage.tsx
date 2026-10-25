@@ -112,6 +112,9 @@ export function FeedbackPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-white">{f.name}</span>
+                    <Badge tone={f.category === "Complaint" ? "red" : f.category === "Menu Suggestion" ? "blue" : "neutral"}>
+                      {f.category ?? "Feedback"}
+                    </Badge>
                     {f.status === "new" && <Badge tone="amber">New</Badge>}
                   </div>
                   <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-amber-100/50">

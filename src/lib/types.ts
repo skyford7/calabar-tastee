@@ -2,15 +2,44 @@ export type AppRole = "dba" | "admin" | "staff";
 export type ShiftStatus = "draft" | "published";
 export type FeedbackStatus = "new" | "read" | "archived";
 
+export type LoginMethod = "password" | "code";
+
 export type Profile = {
   id: string;
   email: string;
+  username: string | null;
   full_name: string;
   phone: string | null;
   job_title: string | null;
   is_active: boolean;
+  login_method: LoginMethod;
+  code_length: number | null;
+  must_change_credentials: boolean;
+  failed_attempts: number;
+  locked_at: string | null;
+  locked_until: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type Announcement = {
+  id: number;
+  author_id: string | null;
+  author_name: string;
+  title: string;
+  body: string;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AnnouncementComment = {
+  id: number;
+  announcement_id: number;
+  author_id: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
 };
 
 export type UserRole = { user_id: string; role: AppRole };
@@ -77,6 +106,7 @@ export type Feedback = {
   email: string;
   phone: string | null;
   comment: string;
+  category: string;
   status: FeedbackStatus;
   created_at: string;
 };

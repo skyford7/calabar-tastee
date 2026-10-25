@@ -2,17 +2,13 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { ADMIN_ORIGIN, isAdminHost, portalPath } from "@/lib/env";
 import { HomePage } from "@/pages/HomePage";
-import { Spinner } from "@/portal/ui";
+import { PageLoader } from "@/portal/ui";
 
 // The portal is code-split so customers never download it.
 const PortalRoutes = lazy(() => import("@/portal/PortalRoutes"));
 
 function PortalFallback() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#1a1410]">
-      <Spinner className="h-10 w-10" />
-    </div>
-  );
+  return <PageLoader />;
 }
 
 /** Phase 2: /admin/* on the main site forwards to admin.calabartastee.com/*. */

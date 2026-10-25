@@ -1,21 +1,19 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, KeyRound, Pencil, Power, UserPlus, Wand2 } from "lucide-react";
+import { Ban, Copy, KeyRound, Pencil, RotateCcw, UserPlus, Wand2 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { qk } from "@/lib/queries";
-import { createStaff, generatePassword, updateStaff } from "@/lib/staffApi";
-import {
-  ROLE_LABEL,
-  type AppRole,
-  type Profile,
-  type TeamMember,
-} from "@/lib/types";
+import { checkSecret, generateCode } from "@/lib/authApi";
+import { createStaff, generatePassword, suggestUsername, updateStaff } from "@/lib/staffApi";
+import { ROLE_LABEL, type AppRole, type LoginMethod, type Profile, type TeamMember } from "@/lib/types";
 import { portalPath } from "@/lib/env";
+import { cn } from "@/lib/utils";
 import {
   Badge,
   Button,
+  Checkbox,
   ErrorBlock,
   Field,
   Input,
@@ -29,26 +27,116 @@ import {
 
 const loginUrl = () => `${window.location.origin}${portalPath("/login")}`;
 
-type Form = {
+type Cred = { method: LoginMethod; length: 4 | 6 | 8; secret: string; mustChange: boolean };
+
+const newCred = (method: LoginMethod = "password", length: 4 | 6 | 8 = 6): Cred => ({
+  method,
+  length,
+  secret: method === "code" ? generateCode(length) : generatePassword(),
+  mustChange: true,
+});
+
+type DetailsForm = {
   id?: string;
+  username: string;
+  usernameTouched: boolean;
   email: string;
   full_name: string;
   phone: string;
   job_title: string;
   role: AppRole;
-  password: string;
+  cred: Cred;
 };
+
+type Shown = { name: string; username: string; method: LoginMethod; secret: string; mustChange: boolean; isNew: boolean };
+
+/** Password / access-code picker. Defined at module level so inputs keep focus while typing. */
+function CredentialFields({ value, onChange }: { value: Cred; onChange: (c: Cred) => void }) {
+  return (
+    <div className="space-y-3 sm:col-span-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-amber-100/60">Sign-in method</div>
+      <div className="grid grid-cols-2 gap-2 rounded-lg bg-[#1a1410] p-1">
+        {(["password", "code"] as const).map(m => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(newCred(m, value.length))}
+            className={cn(
+              "rounded-md py-2 text-sm font-medium transition-colors",
+              value.method === m ? "bg-amber-600 text-white" : "text-amber-100/60 hover:text-amber-200"
+            )}
+          >
+            {m === "password" ? "Password" : "Access code"}
+          </button>
+        ))}
+      </div>
+      {value.method === "code" && (
+        <Field label="Code length">
+          <Select
+            value={value.length}
+            onChange={e => onChange(newCred("code", Number(e.target.value) as 4 | 6 | 8))}
+          >
+            <option value={4}>4 digits</option>
+            <option value={6}>6 digits</option>
+            <option value={8}>8 digits</option>
+          </Select>
+        </Field>
+      )}
+      <Field
+        label={value.method === "code" ? `${value.length}-digit access code` : "Password"}
+        hint={value.method === "code" ? "Numbers only." : "At least 8 characters."}
+      >
+        <div className="flex gap-2">
+          <Input
+            required
+            inputMode={value.method === "code" ? "numeric" : undefined}
+            maxLength={value.method === "code" ? value.length : 72}
+            className={value.method === "code" ? "font-mono tracking-[0.3em]" : undefined}
+            value={value.secret}
+            onChange={e =>
+              onChange({
+                ...value,
+                secret:
+                  value.method === "code"
+                    ? e.target.value.replace(/\D/g, "").slice(0, value.length)
+                    : e.target.value,
+              })
+            }
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            title="Generate"
+            onClick={() => onChange({ ...newCred(value.method, value.length), mustChange: value.mustChange })}
+          >
+            <Wand2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </Field>
+      <Checkbox
+        label="Ask them to choose their own at next sign-in"
+        checked={value.mustChange}
+        onChange={v => onChange({ ...value, mustChange: v })}
+      />
+    </div>
+  );
+}
+
+function statusOf(m: TeamMember): { label: string; tone: "green" | "red" | "neutral" | "amber" } {
+  if (m.locked_at) return { label: "Restricted — 5 failed attempts", tone: "red" };
+  if (!m.is_active) return { label: "Suspended", tone: "neutral" };
+  if (m.locked_until && new Date(m.locked_until).getTime() > Date.now()) return { label: "Locked 15 min", tone: "red" };
+  if (m.must_change_credentials) return { label: "Awaiting first sign-in", tone: "amber" };
+  return { label: "Active", tone: "green" };
+}
 
 export function StaffPage() {
   const { profile: me, role: myRole, can } = useAuth();
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const [form, setForm] = useState<Form | null>(null);
-  const [credentials, setCredentials] = useState<{
-    email: string;
-    password: string;
-    isNew: boolean;
-  } | null>(null);
+  const [form, setForm] = useState<DetailsForm | null>(null);
+  const [credFor, setCredFor] = useState<{ member: TeamMember; cred: Cred } | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
   const team = useQuery({
@@ -60,105 +148,106 @@ export function StaffPage() {
       ]);
       if (p.error) throw p.error;
       if (r.error) throw r.error;
-      const roles = new Map(
-        (r.data ?? []).map(x => [x.user_id as string, x.role as AppRole])
-      );
-      return (p.data as Profile[]).map<TeamMember>(x => ({
-        ...x,
-        role: roles.get(x.id) ?? null,
-      }));
+      const roles = new Map((r.data ?? []).map(x => [x.user_id as string, x.role as AppRole]));
+      return (p.data as Profile[]).map<TeamMember>(x => ({ ...x, role: roles.get(x.id) ?? null }));
     },
   });
 
   const refresh = () =>
-    Promise.all([
-      qc.invalidateQueries({ queryKey: qk.team }),
-      qc.invalidateQueries({ queryKey: qk.directory }),
-    ]);
+    Promise.all([qc.invalidateQueries({ queryKey: qk.team }), qc.invalidateQueries({ queryKey: qk.directory })]);
 
-  /** Admins may only manage staff (or role-less) accounts; DBAs manage everyone. Nobody manages themselves here. */
-  const canManage = (m: TeamMember) =>
-    m.id !== me?.id &&
-    (myRole === "dba" || m.role === "staff" || m.role === null);
+  /** Admins manage staff (or role-less) accounts; Database Administrators manage everyone. Nobody manages themselves here. */
+  const canManage = (m: TeamMember) => m.id !== me?.id && (myRole === "dba" || m.role === "staff" || m.role === null);
 
   const save = useMutation({
-    mutationFn: async (f: Form) => {
+    mutationFn: async (f: DetailsForm) => {
       if (f.id) {
         await updateStaff({
           user_id: f.id,
+          username: f.username.trim().toLowerCase(),
           full_name: f.full_name,
           phone: f.phone || null,
           job_title: f.job_title || null,
           ...(can.manageRoles ? { role: f.role } : {}),
         });
       } else {
+        const problem = checkSecret(f.cred.method, f.cred.secret, f.cred.method === "code" ? f.cred.length : undefined);
+        if (problem) throw new Error(problem);
         await createStaff({
+          username: f.username.trim().toLowerCase(),
           email: f.email,
-          password: f.password,
           full_name: f.full_name,
           phone: f.phone || undefined,
           job_title: f.job_title || undefined,
           role: can.manageRoles ? f.role : "staff",
+          credentials: { method: f.cred.method, secret: f.cred.secret, must_change: f.cred.mustChange },
         });
       }
     },
     onSuccess: (_r, f) => {
       toast.success(f.id ? "Account updated" : "Account created");
-      if (!f.id)
-        setCredentials({ email: f.email, password: f.password, isNew: true });
+      if (!f.id) {
+        setShown({
+          name: f.full_name,
+          username: f.username.trim().toLowerCase(),
+          method: f.cred.method,
+          secret: f.cred.secret,
+          mustChange: f.cred.mustChange,
+          isNew: true,
+        });
+      }
       setForm(null);
       void refresh();
     },
     onError: e => toast.error(errorMessage(e)),
   });
 
-  const setActive = useMutation({
-    mutationFn: (v: { m: TeamMember; active: boolean }) =>
-      updateStaff({ user_id: v.m.id, is_active: v.active }),
+  const setCredentials = useMutation({
+    mutationFn: async (v: { member: TeamMember; cred: Cred }) => {
+      const problem = checkSecret(v.cred.method, v.cred.secret, v.cred.method === "code" ? v.cred.length : undefined);
+      if (problem) throw new Error(problem);
+      await updateStaff({
+        user_id: v.member.id,
+        credentials: { method: v.cred.method, secret: v.cred.secret, must_change: v.cred.mustChange },
+      });
+    },
     onSuccess: (_r, v) => {
-      toast.success(
-        v.active
-          ? `${v.m.full_name} reactivated`
-          : `${v.m.full_name} deactivated`
-      );
+      setCredFor(null);
+      setShown({
+        name: v.member.full_name,
+        username: v.member.username ?? "",
+        method: v.cred.method,
+        secret: v.cred.secret,
+        mustChange: v.cred.mustChange,
+        isNew: false,
+      });
       void refresh();
     },
     onError: e => toast.error(errorMessage(e)),
   });
 
-  const resetPassword = useMutation({
-    mutationFn: async (m: TeamMember) => {
-      const password = generatePassword();
-      await updateStaff({ user_id: m.id, password });
-      return { email: m.email, password };
+  const setActive = useMutation({
+    mutationFn: (v: { m: TeamMember; active: boolean }) => updateStaff({ user_id: v.m.id, is_active: v.active }),
+    onSuccess: (_r, v) => {
+      toast.success(v.active ? `${v.m.full_name} reactivated` : `${v.m.full_name} suspended`);
+      void refresh();
     },
-    onSuccess: c => setCredentials({ ...c, isNew: false }),
     onError: e => toast.error(errorMessage(e)),
   });
 
   const onToggleActive = async (m: TeamMember) => {
     const active = !m.is_active;
     const ok = await confirm({
-      title: active ? "Reactivate account?" : "Deactivate account?",
+      title: active ? (m.locked_at ? "Reset and reactivate?" : "Reactivate account?") : "Suspend account?",
       message: active
-        ? `${m.full_name} will be able to sign in again.`
-        : `${m.full_name} will be signed out and blocked from the portal. Their shift history is kept. You can reactivate them later.`,
-      confirmLabel: active ? "Reactivate" : "Deactivate",
+        ? m.locked_at
+          ? `This clears the failed-attempts restriction on ${m.full_name} so they can sign in again. Consider setting a new password or code too.`
+          : `${m.full_name} will be able to sign in again.`
+        : `${m.full_name} will be signed out and blocked from signing in. Their shift history is kept. You can reactivate them later.`,
+      confirmLabel: active ? "Reactivate" : "Suspend",
       danger: !active,
     });
     if (ok) setActive.mutate({ m, active });
-  };
-
-  const onReset = async (m: TeamMember) => {
-    if (
-      await confirm({
-        title: "Reset password?",
-        message: `A new temporary password will be generated for ${m.full_name}. Their old password stops working.`,
-        confirmLabel: "Reset",
-      })
-    ) {
-      resetPassword.mutate(m);
-    }
   };
 
   const submit = (e: FormEvent) => {
@@ -168,9 +257,11 @@ export function StaffPage() {
 
   const rows = (team.data ?? []).filter(m => showInactive || m.is_active);
   const inactiveCount = (team.data ?? []).filter(m => !m.is_active).length;
-  const roleOptions: AppRole[] = can.manageRoles
-    ? ["staff", "admin", "dba"]
-    : ["staff"];
+  const roleOptions: AppRole[] = can.manageRoles ? ["staff", "admin", "dba"] : ["staff"];
+
+  const shownText = shown
+    ? `Calabar Tastee staff portal\n${loginUrl()}\nUsername: ${shown.username}\n${shown.method === "code" ? "Access code" : "Password"}: ${shown.secret}`
+    : "";
 
   return (
     <>
@@ -178,19 +269,21 @@ export function StaffPage() {
         title="Staff"
         description={
           can.manageRoles
-            ? "Create logins and manage roles. Only Database Admins can grant Admin or DBA access."
-            : "Create and manage staff logins. Contact the Database Admin to change admin access."
+            ? "Create accounts, set passwords or access codes, and manage roles. Only Database Administrators can grant Admin or Database Administrator access."
+            : "Create staff accounts, set passwords or access codes, and suspend accounts."
         }
         actions={
           <Button
             onClick={() =>
               setForm({
+                username: "",
+                usernameTouched: false,
                 email: "",
                 full_name: "",
                 phone: "",
                 job_title: "",
                 role: "staff",
-                password: generatePassword(),
+                cred: newCred(),
               })
             }
           >
@@ -207,7 +300,7 @@ export function StaffPage() {
             checked={showInactive}
             onChange={e => setShowInactive(e.target.checked)}
           />
-          Show {inactiveCount} deactivated
+          Show {inactiveCount} suspended / restricted
         </label>
       )}
 
@@ -226,100 +319,98 @@ export function StaffPage() {
             </tr>
           }
         >
-          {rows.map(m => (
-            <tr
-              key={m.id}
-              className={
-                m.is_active ? "text-amber-100/80" : "text-amber-100/40"
-              }
-            >
-              <td className="px-4 py-3">
-                <div className="font-medium text-white">
-                  {m.full_name || "—"}{" "}
-                  {m.id === me?.id && (
-                    <span className="text-xs text-amber-500">(you)</span>
+          {rows.map(m => {
+            const st = statusOf(m);
+            return (
+              <tr key={m.id} className={m.is_active ? "text-amber-100/80" : "text-amber-100/40"}>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-white">
+                    {m.full_name || "—"}{" "}
+                    {m.id === me?.id && <span className="text-xs text-amber-500">(you)</span>}
+                  </div>
+                  <div className="text-xs text-amber-100/50">
+                    @{m.username ?? "—"} · {m.login_method === "code" ? `${m.code_length ?? ""}-digit code` : "password"}
+                  </div>
+                  <div className="text-xs text-amber-100/40">
+                    {m.email}
+                    {m.job_title && ` · ${m.job_title}`}
+                    {m.phone && ` · ${m.phone}`}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  {m.role ? (
+                    <Badge tone={m.role === "staff" ? "neutral" : "amber"}>{ROLE_LABEL[m.role]}</Badge>
+                  ) : (
+                    <Badge tone="red">No access</Badge>
                   )}
-                </div>
-                <div className="text-xs text-amber-100/40">
-                  {m.email}
-                  {m.job_title && ` · ${m.job_title}`}
-                  {m.phone && ` · ${m.phone}`}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                {m.role ? (
-                  <Badge tone={m.role === "staff" ? "neutral" : "amber"}>
-                    {ROLE_LABEL[m.role]}
-                  </Badge>
-                ) : (
-                  <Badge tone="red">No access</Badge>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                {m.is_active ? (
-                  <Badge tone="green">Active</Badge>
-                ) : (
-                  <Badge>Deactivated</Badge>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                {canManage(m) ? (
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title="Edit"
-                      onClick={() =>
-                        setForm({
-                          id: m.id,
-                          email: m.email,
-                          full_name: m.full_name,
-                          phone: m.phone ?? "",
-                          job_title: m.job_title ?? "",
-                          role: m.role ?? "staff",
-                          password: "",
-                        })
-                      }
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title="Reset password"
-                      onClick={() => void onReset(m)}
-                      disabled={!m.is_active}
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title={m.is_active ? "Deactivate" : "Reactivate"}
-                      className={
-                        m.is_active ? "text-red-400" : "text-green-400"
-                      }
-                      onClick={() => void onToggleActive(m)}
-                    >
-                      <Power className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-right text-xs text-amber-100/30">
-                    {m.id === me?.id ? "Edit in My account" : "DBA only"}
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="px-4 py-3">
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                </td>
+                <td className="px-4 py-3">
+                  {canManage(m) ? (
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Edit details"
+                        onClick={() =>
+                          setForm({
+                            id: m.id,
+                            username: m.username ?? "",
+                            usernameTouched: true,
+                            email: m.email,
+                            full_name: m.full_name,
+                            phone: m.phone ?? "",
+                            job_title: m.job_title ?? "",
+                            role: m.role ?? "staff",
+                            cred: newCred(),
+                          })
+                        }
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Set password or access code"
+                        onClick={() =>
+                          setCredFor({
+                            member: m,
+                            cred: newCred(m.login_method, ([4, 6, 8].includes(m.code_length ?? 0) ? m.code_length : 6) as 4 | 6 | 8),
+                          })
+                        }
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title={m.is_active ? "Suspend" : m.locked_at ? "Reset & reactivate" : "Reactivate"}
+                        className={m.is_active ? "text-red-400" : "text-green-400"}
+                        onClick={() => void onToggleActive(m)}
+                      >
+                        {m.is_active ? <Ban className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-right text-xs text-amber-100/30">
+                      {m.id === me?.id ? "Edit in My account" : "Database Administrator only"}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </Table>
       )}
 
-      {/* Create / edit */}
+      {/* Create / edit details */}
       <Modal
         open={!!form}
         onClose={() => setForm(null)}
         title={form?.id ? "Edit team member" : "Add team member"}
+        wide
         footer={
           <>
             <Button variant="ghost" onClick={() => setForm(null)}>
@@ -332,20 +423,36 @@ export function StaffPage() {
         }
       >
         {form && (
-          <form
-            id="staff-form"
-            onSubmit={submit}
-            className="grid gap-4 sm:grid-cols-2"
-          >
+          <form id="staff-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
             <Field label="Full name" className="sm:col-span-2">
               <Input
                 required
                 maxLength={120}
                 value={form.full_name}
-                onChange={e => setForm({ ...form, full_name: e.target.value })}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    full_name: e.target.value,
+                    username: form.usernameTouched ? form.username : suggestUsername(e.target.value),
+                  })
+                }
               />
             </Field>
-            <Field label="Email (used to sign in)" className="sm:col-span-2">
+            <Field label="Username (used to sign in)" hint="Letters, numbers, dots, dashes. 3–30 characters.">
+              <Input
+                required
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                minLength={3}
+                maxLength={30}
+                value={form.username}
+                onChange={e =>
+                  setForm({ ...form, username: e.target.value.toLowerCase().replace(/\s/g, ""), usernameTouched: true })
+                }
+              />
+            </Field>
+            <Field label="Email (for contact)" hint={form.id ? "Contact the Database Administrator to change." : undefined}>
               <Input
                 type="email"
                 required
@@ -355,35 +462,20 @@ export function StaffPage() {
               />
             </Field>
             <Field label="Job title" hint="e.g. Chef, Front of house">
-              <Input
-                maxLength={60}
-                value={form.job_title}
-                onChange={e => setForm({ ...form, job_title: e.target.value })}
-              />
+              <Input maxLength={60} value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} />
             </Field>
             <Field label="Phone">
-              <Input
-                type="tel"
-                maxLength={30}
-                value={form.phone}
-                onChange={e => setForm({ ...form, phone: e.target.value })}
-              />
+              <Input type="tel" maxLength={30} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             </Field>
             <Field
               label="Role"
               className="sm:col-span-2"
-              hint={
-                can.manageRoles
-                  ? undefined
-                  : "Admins can create Staff accounts."
-              }
+              hint={can.manageRoles ? undefined : "Admins can create Staff accounts."}
             >
               <Select
                 value={form.role}
                 disabled={!can.manageRoles}
-                onChange={e =>
-                  setForm({ ...form, role: e.target.value as AppRole })
-                }
+                onChange={e => setForm({ ...form, role: e.target.value as AppRole })}
               >
                 {roleOptions.map(r => (
                   <option key={r} value={r}>
@@ -392,65 +484,67 @@ export function StaffPage() {
                 ))}
               </Select>
             </Field>
-            {!form.id && (
-              <Field
-                label="Temporary password"
-                className="sm:col-span-2"
-                hint="At least 10 characters. Share it privately; they can change it under My account."
-              >
-                <div className="flex gap-2">
-                  <Input
-                    required
-                    minLength={10}
-                    value={form.password}
-                    onChange={e =>
-                      setForm({ ...form, password: e.target.value })
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    title="Generate"
-                    onClick={() =>
-                      setForm({ ...form, password: generatePassword() })
-                    }
-                  >
-                    <Wand2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </Field>
-            )}
+            {!form.id && <CredentialFields value={form.cred} onChange={cred => setForm({ ...form, cred })} />}
           </form>
         )}
       </Modal>
 
-      {/* Show credentials once */}
+      {/* Set password / access code for someone else */}
       <Modal
-        open={!!credentials}
-        onClose={() => setCredentials(null)}
-        title={credentials?.isNew ? "Account created" : "Password reset"}
-        footer={<Button onClick={() => setCredentials(null)}>Done</Button>}
+        open={!!credFor}
+        onClose={() => setCredFor(null)}
+        title={credFor ? `Sign-in for ${credFor.member.full_name}` : ""}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCredFor(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="cred-form" loading={setCredentials.isPending}>
+              Save sign-in
+            </Button>
+          </>
+        }
       >
-        {credentials && (
+        {credFor && (
+          <form
+            id="cred-form"
+            onSubmit={e => {
+              e.preventDefault();
+              setCredentials.mutate(credFor);
+            }}
+            className="grid gap-4"
+          >
+            <p className="text-sm text-amber-100/60">
+              Their current password or code stops working straight away. Username: <b>@{credFor.member.username}</b>
+            </p>
+            <CredentialFields value={credFor.cred} onChange={cred => setCredFor({ ...credFor, cred })} />
+          </form>
+        )}
+      </Modal>
+
+      {/* Show the details once */}
+      <Modal
+        open={!!shown}
+        onClose={() => setShown(null)}
+        title={shown?.isNew ? "Account created" : "Sign-in updated"}
+        footer={<Button onClick={() => setShown(null)}>Done</Button>}
+      >
+        {shown && (
           <div className="space-y-4 text-sm">
             <p className="text-amber-100/70">
-              Share these sign-in details privately. The password won't be shown
-              again.
+              Share these with {shown.name} privately. They won't be shown again.
+              {shown.mustChange && " They'll be asked to choose their own at first sign-in."}
             </p>
             <div className="space-y-2 rounded-lg border border-amber-900/40 bg-[#1a1410] p-4 font-mono text-amber-100">
               <div>Sign in: {loginUrl()}</div>
-              <div>Email: {credentials.email}</div>
-              <div>Password: {credentials.password}</div>
+              <div>Username: {shown.username}</div>
+              <div>
+                {shown.method === "code" ? "Access code" : "Password"}: {shown.secret}
+              </div>
             </div>
             <Button
               variant="secondary"
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(
-                    `Calabar Tastee staff portal\n${loginUrl()}\nEmail: ${credentials.email}\nPassword: ${credentials.password}`
-                  )
-                  .then(() => toast.success("Copied"));
-              }}
+              onClick={() => void navigator.clipboard.writeText(shownText).then(() => toast.success("Copied"))}
             >
               <Copy className="h-4 w-4" /> Copy details
             </Button>

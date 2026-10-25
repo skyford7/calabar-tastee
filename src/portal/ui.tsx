@@ -13,7 +13,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { Loader2, X } from "lucide-react";
+import { ChefHat, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* Palette (matches the public site) ------------------------------------------
@@ -226,8 +226,34 @@ export function Spinner({ className }: { className?: string }) {
 
 export function LoadingBlock() {
   return (
-    <div className="flex justify-center py-16">
-      <Spinner />
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
+      <div className="relative h-10 w-10">
+        <div className="absolute inset-0 rounded-full border-2 border-amber-900/40" />
+        <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-amber-500" />
+      </div>
+      <div className="flex gap-1">
+        {[0, 1, 2].map(i => (
+          <span
+            key={i}
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-amber-500/70"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Full-screen branded loader for app start / route loading. */
+export function PageLoader() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#1a1410]">
+      <div className="relative flex h-20 w-20 items-center justify-center">
+        <div className="absolute inset-0 rounded-full border-2 border-amber-900/40" />
+        <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-amber-500 border-r-amber-500/40" />
+        <ChefHat className="h-8 w-8 animate-pulse text-amber-500" />
+      </div>
+      <div className="font-['Playfair_Display'] text-lg font-semibold text-gradient">Calabar Tastee</div>
     </div>
   );
 }

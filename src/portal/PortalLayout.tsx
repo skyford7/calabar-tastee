@@ -15,6 +15,8 @@ import {
   UtensilsCrossed,
   X,
   ExternalLink,
+  Image as ImageIcon,
+  Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { isAdminHost, portalPath } from "@/lib/env";
@@ -35,6 +37,12 @@ export function PortalLayout() {
       show: true,
     },
     {
+      to: "/center-net",
+      label: "Center Net",
+      icon: <Megaphone className="h-4 w-4" />,
+      show: true,
+    },
+    {
       to: "/roster",
       label: "Roster",
       icon: <CalendarDays className="h-4 w-4" />,
@@ -50,6 +58,12 @@ export function PortalLayout() {
       to: "/categories",
       label: "Categories",
       icon: <Tags className="h-4 w-4" />,
+      show: can.manageMenu,
+    },
+    {
+      to: "/photos",
+      label: "Website photos",
+      icon: <ImageIcon className="h-4 w-4" />,
       show: can.manageMenu,
     },
     {
@@ -114,8 +128,11 @@ export function PortalLayout() {
     <div className="border-t border-amber-900/30 pt-4">
       <div className="mb-3 px-1">
         <div className="truncate text-sm font-medium text-white">
-          {profile?.full_name || profile?.email}
+          {profile?.full_name || profile?.username}
         </div>
+        {profile?.username && (
+          <div className="truncate text-xs text-amber-100/40">@{profile.username}</div>
+        )}
         <div className="text-xs text-amber-500">
           {role ? ROLE_LABEL[role] : ""}
         </div>

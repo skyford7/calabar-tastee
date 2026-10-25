@@ -1,52 +1,64 @@
 /**
  * Vercel Function: staff account management.
  *
- *   POST  /api/admin/users   create a login + role       (admin: staff only, dba: any role)
- *   PATCH /api/admin/users   update role / active / password / details
+ *   POST  /api/admin/users   create an account + role  (admin: staff only, dba: any role)
+ *   PATCH /api/admin/users   update details / role / suspend / sign-in credentials
  *
- * Creating auth users and setting passwords needs the Supabase SECRET key, so it
- * can't happen in the browser. Every request must carry the caller's Supabase
- * access token; the caller's role is looked up in the database (never trusted
- * from the request) and these rules are enforced:
+ * Staff sign in with a USERNAME and either a password or a 4/6/8-digit access
+ * code (see /api/auth/login). Email is kept for contact only. The Supabase Auth
+ * password is derived from the typed secret with a server-only pepper.
  *
- *   - Only a DBA can create, grant or revoke `admin` / `dba`.
- *   - An admin can create, edit, reset passwords for, and (de)activate `staff` only.
+ * Rules (the caller's role comes from the database, never from the request):
+ *   - Only a Database Administrator can create, grant or revoke `admin` / `dba`.
+ *   - An Admin can create, edit, suspend, and set credentials for `staff` only.
  *   - Nobody can change their own role or active status here.
- *   - The database additionally refuses to remove/deactivate the last active DBA.
+ *   - Reactivating an account also clears a failed-attempts restriction (system reset).
  *
- * Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY
+ * Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY, AUTH_PEPPER
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 
 type Role = "dba" | "admin" | "staff";
 type Caller = { id: string; role: Role };
+type Method = "password" | "code";
 
 const ROLES = ["dba", "admin", "staff"] as const;
 const BAN_FOREVER = "876000h"; // ~100 years
 
+const username = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(
+    /^[a-z0-9][a-z0-9._-]{2,29}$/,
+    "Usernames are 3–30 characters: letters, numbers, dots, dashes or underscores."
+  );
+
+const credentials = z.object({
+  method: z.enum(["password", "code"]),
+  secret: z.string().min(1).max(72),
+  must_change: z.boolean().default(true),
+});
+
 const createSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  password: z
-    .string()
-    .min(10, "Password must be at least 10 characters.")
-    .max(72),
+  username,
+  email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254),
   full_name: z.string().trim().min(1, "Name is required.").max(120),
   phone: z.string().trim().max(30).optional(),
   job_title: z.string().trim().max(60).optional(),
   role: z.enum(ROLES).default("staff"),
+  credentials,
 });
 
 const updateSchema = z
   .object({
     user_id: z.string().uuid(),
+    username: username.optional(),
     role: z.enum(ROLES).optional(),
     is_active: z.boolean().optional(),
-    password: z
-      .string()
-      .min(10, "Password must be at least 10 characters.")
-      .max(72)
-      .optional(),
+    credentials: credentials.optional(),
     full_name: z.string().trim().min(1).max(120).optional(),
     phone: z.string().trim().max(30).nullable().optional(),
     job_title: z.string().trim().max(60).nullable().optional(),
@@ -56,10 +68,7 @@ const updateSchema = z
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-    },
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
 
@@ -74,8 +83,7 @@ class HttpError extends Error {
 function adminClient(actorId?: string): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !secret)
-    throw new HttpError(500, "Server is missing Supabase configuration.");
+  if (!url || !secret) throw new HttpError(500, "Server is missing Supabase configuration.");
   return createClient(url, secret, {
     auth: { persistSession: false, autoRefreshToken: false },
     // Lets the audit trigger attribute changes to the person who made them.
@@ -83,36 +91,38 @@ function adminClient(actorId?: string): SupabaseClient {
   });
 }
 
-async function roleOf(
-  db: SupabaseClient,
-  userId: string
-): Promise<Role | null> {
-  const { data, error } = await db
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle();
+/** Must match /api/auth/login. */
+function authSecret(method: Method, secret: string): string {
+  const pepper = process.env.AUTH_PEPPER;
+  if (!pepper) throw new HttpError(500, "Server is missing AUTH_PEPPER.");
+  return `ct1.${createHmac("sha256", pepper).update(`${method}:${secret}`).digest("base64url")}`;
+}
+
+function validateSecret(method: Method, secret: string) {
+  if (method === "code") {
+    if (!/^\d+$/.test(secret)) throw new HttpError(400, "Access codes are numbers only.");
+    if (![4, 6, 8].includes(secret.length))
+      throw new HttpError(400, "Access codes must be 4, 6 or 8 digits.");
+  } else if (secret.length < 8) {
+    throw new HttpError(400, "Passwords must be at least 8 characters.");
+  }
+}
+
+async function roleOf(db: SupabaseClient, userId: string): Promise<Role | null> {
+  const { data, error } = await db.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
   if (error) throw new HttpError(500, error.message);
   return (data?.role as Role | undefined) ?? null;
 }
 
 async function authenticate(request: Request): Promise<Caller> {
-  const token = request.headers
-    .get("authorization")
-    ?.replace(/^Bearer\s+/i, "")
-    .trim();
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
   if (!token) throw new HttpError(401, "Not signed in.");
 
   const db = adminClient();
   const { data, error } = await db.auth.getUser(token);
-  if (error || !data.user)
-    throw new HttpError(401, "Your session has expired. Please sign in again.");
+  if (error || !data.user) throw new HttpError(401, "Your session has expired. Please sign in again.");
 
-  const { data: profile } = await db
-    .from("profiles")
-    .select("is_active")
-    .eq("id", data.user.id)
-    .maybeSingle();
+  const { data: profile } = await db.from("profiles").select("is_active").eq("id", data.user.id).maybeSingle();
   const role = await roleOf(db, data.user.id);
   if (!profile?.is_active || (role !== "dba" && role !== "admin")) {
     throw new HttpError(403, "Only admins can manage staff accounts.");
@@ -126,25 +136,36 @@ function assertCanManage(caller: Caller, targetRole: Role | null) {
   throw new HttpError(403, "Admins can only manage staff accounts.");
 }
 
+async function assertUsernameFree(db: SupabaseClient, name: string, exceptId?: string) {
+  const { data } = await db.from("profiles").select("id").eq("username", name).maybeSingle();
+  if (data && data.id !== exceptId) throw new HttpError(400, "That username is already taken.");
+}
+
+function credentialFields(method: Method, secret: string, mustChange: boolean) {
+  return {
+    login_method: method,
+    code_length: method === "code" ? secret.length : null,
+    must_change_credentials: mustChange,
+    credentials_migrated: true,
+    failed_attempts: 0,
+  };
+}
+
 async function handleCreate(caller: Caller, body: unknown) {
   const input = createSchema.parse(body);
   if (input.role !== "staff" && caller.role !== "dba") {
-    throw new HttpError(
-      403,
-      "Only a Database Admin can create admin or DBA accounts."
-    );
+    throw new HttpError(403, "Only a Database Administrator can create admin or Database Administrator accounts.");
   }
+  validateSecret(input.credentials.method, input.credentials.secret);
 
   const db = adminClient(caller.id);
+  await assertUsernameFree(db, input.username);
+
   const { data, error } = await db.auth.admin.createUser({
     email: input.email,
-    password: input.password,
-    email_confirm: true, // no confirmation email; the account is usable immediately
-    user_metadata: {
-      full_name: input.full_name,
-      phone: input.phone,
-      job_title: input.job_title,
-    },
+    password: authSecret(input.credentials.method, input.credentials.secret),
+    email_confirm: true, // no confirmation email; usable immediately
+    user_metadata: { full_name: input.full_name, phone: input.phone, job_title: input.job_title },
   });
   if (error || !data.user) {
     const msg = /already.*(registered|exists)/i.test(error?.message ?? "")
@@ -154,23 +175,27 @@ async function handleCreate(caller: Caller, body: unknown) {
   }
 
   const userId = data.user.id;
+  const rollback = async (message: string) => {
+    await db.auth.admin.deleteUser(userId);
+    throw new HttpError(500, message);
+  };
+
   const { error: roleError } = await db
     .from("user_roles")
     .upsert({ user_id: userId, role: input.role, granted_by: caller.id });
-  if (roleError) {
-    await db.auth.admin.deleteUser(userId); // roll back so we don't leave a role-less login
-    throw new HttpError(500, `Could not assign role: ${roleError.message}`);
-  }
+  if (roleError) await rollback(`Could not assign role: ${roleError.message}`);
 
-  // The signup trigger copies name/phone/title from metadata; set them again in case of truncation rules.
-  await db
+  const { error: profileError } = await db
     .from("profiles")
     .update({
+      username: input.username,
       full_name: input.full_name,
       phone: input.phone || null,
       job_title: input.job_title || null,
+      ...credentialFields(input.credentials.method, input.credentials.secret, input.credentials.must_change),
     })
     .eq("id", userId);
+  if (profileError) await rollback(`Could not save profile: ${profileError.message}`);
 
   return json(201, { user_id: userId });
 }
@@ -182,79 +207,64 @@ async function handleUpdate(caller: Caller, body: unknown) {
   const isSelf = input.user_id === caller.id;
 
   if (isSelf && (input.role !== undefined || input.is_active !== undefined)) {
-    throw new HttpError(
-      400,
-      "You can't change your own role or active status."
-    );
+    throw new HttpError(400, "You can't change your own role or active status.");
   }
   if (!isSelf) assertCanManage(caller, targetRole);
-  if (
-    input.role !== undefined &&
-    input.role !== targetRole &&
-    caller.role !== "dba"
-  ) {
-    throw new HttpError(403, "Only a Database Admin can change roles.");
+  if (input.role !== undefined && input.role !== targetRole && caller.role !== "dba") {
+    throw new HttpError(403, "Only a Database Administrator can change roles.");
   }
 
-  // Role
   if (input.role !== undefined && input.role !== targetRole) {
     const { error } = await db
       .from("user_roles")
-      .upsert({
-        user_id: input.user_id,
-        role: input.role,
-        granted_by: caller.id,
-      });
+      .upsert({ user_id: input.user_id, role: input.role, granted_by: caller.id });
     if (error) throw new HttpError(400, error.message);
   }
 
-  // Profile details + active flag (DB trigger blocks deactivating the last DBA)
-  const profilePatch: Record<string, unknown> = {};
-  if (input.full_name !== undefined) profilePatch.full_name = input.full_name;
-  if (input.phone !== undefined) profilePatch.phone = input.phone || null;
-  if (input.job_title !== undefined)
-    profilePatch.job_title = input.job_title || null;
+  const patch: Record<string, unknown> = {};
+  if (input.full_name !== undefined) patch.full_name = input.full_name;
+  if (input.phone !== undefined) patch.phone = input.phone || null;
+  if (input.job_title !== undefined) patch.job_title = input.job_title || null;
+  if (input.username !== undefined) {
+    await assertUsernameFree(db, input.username, input.user_id);
+    patch.username = input.username;
+  }
 
-  if (input.is_active === true) {
+  if (input.credentials) {
+    validateSecret(input.credentials.method, input.credentials.secret);
     const { error } = await db.auth.admin.updateUserById(input.user_id, {
-      ban_duration: "none",
+      password: authSecret(input.credentials.method, input.credentials.secret),
     });
     if (error) throw new HttpError(400, error.message);
-    profilePatch.is_active = true;
+    Object.assign(
+      patch,
+      credentialFields(input.credentials.method, input.credentials.secret, input.credentials.must_change)
+    );
   }
-  if (input.is_active === false) profilePatch.is_active = false;
 
-  if (Object.keys(profilePatch).length) {
-    const { error } = await db
-      .from("profiles")
-      .update(profilePatch)
-      .eq("id", input.user_id);
+  if (input.is_active === true) {
+    // Reactivate = system reset: lifts suspension and any failed-attempts restriction.
+    const { error } = await db.auth.admin.updateUserById(input.user_id, { ban_duration: "none" });
+    if (error) throw new HttpError(400, error.message);
+    Object.assign(patch, { is_active: true, locked_at: null, locked_until: null, failed_attempts: 0 });
+  }
+  if (input.is_active === false) patch.is_active = false;
+
+  if (Object.keys(patch).length) {
+    const { error } = await db.from("profiles").update(patch).eq("id", input.user_id);
     if (error) throw new HttpError(400, error.message);
   }
 
   if (input.is_active === false) {
-    // Blocks sign-in and token refresh. RLS already denies access because the profile is inactive.
-    const { error } = await db.auth.admin.updateUserById(input.user_id, {
-      ban_duration: BAN_FOREVER,
-    });
-    if (error) throw new HttpError(400, error.message);
-  }
-
-  // Password reset
-  if (input.password) {
-    const { error } = await db.auth.admin.updateUserById(input.user_id, {
-      password: input.password,
-    });
+    // Suspend: blocks sign-in and token refresh. RLS already denies access to inactive profiles.
+    const { error } = await db.auth.admin.updateUserById(input.user_id, { ban_duration: BAN_FOREVER });
     if (error) throw new HttpError(400, error.message);
   }
 
   return json(200, { ok: true });
 }
 
-async function handle(
-  request: Request,
-  fn: (caller: Caller, body: unknown) => Promise<Response>
-) {
+async function handle(request: Request, fn: (caller: Caller, body: unknown) => Promise<Response>) {
   try {
     const caller = await authenticate(request);
     const body = await request.json().catch(() => {
@@ -262,10 +272,8 @@ async function handle(
     });
     return await fn(caller, body);
   } catch (err) {
-    if (err instanceof HttpError)
-      return json(err.status, { error: err.message });
-    if (err instanceof z.ZodError)
-      return json(400, { error: err.issues[0]?.message ?? "Invalid input." });
+    if (err instanceof HttpError) return json(err.status, { error: err.message });
+    if (err instanceof z.ZodError) return json(400, { error: err.issues[0]?.message ?? "Invalid input." });
     console.error("[api/admin/users]", err);
     return json(500, { error: "Unexpected server error." });
   }

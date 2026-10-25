@@ -10,6 +10,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { loginWithSecret, LoginError } from "@/lib/authApi";
 import { permissionsFor, type Permissions } from "@/lib/permissions";
 import type { AppRole, Profile } from "@/lib/types";
 
@@ -17,10 +18,11 @@ type AuthState = {
   loading: boolean;
   session: Session | null;
   profile: Profile | null;
-  /** null when signed out, deactivated, or no role assigned. */
+  /** null when signed out, suspended, or no role assigned. */
   role: AppRole | null;
   can: Permissions;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** Username + password or access code. */
+  signIn: (username: string, secret: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -34,9 +36,7 @@ async function fetchMember(uid: string): Promise<Member> {
   ]);
   if (p.error) throw p.error;
   const profile = (p.data as Profile | null) ?? null;
-  const role = profile?.is_active
-    ? ((r.data?.role as AppRole | undefined) ?? null)
-    : null;
+  const role = profile?.is_active ? ((r.data?.role as AppRole | undefined) ?? null) : null;
   return { profile, role };
 }
 
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       // Keep this callback synchronous — calling Supabase from inside it can deadlock.
       setSession(next);
-      if (event === "SIGNED_OUT") qc.clear(); // drop any cached private data
+      if (event === "SIGNED_OUT") qc.clear();
     });
     return () => {
       mounted = false;
@@ -75,27 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const signIn = useCallback(
-    async (email: string, password: string) => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+    async (username: string, secret: string) => {
+      const tokens = await loginWithSecret(username, secret);
+      const { data, error } = await supabase.auth.setSession({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
       });
-      if (error) {
-        throw new Error(
-          /banned/i.test(error.message)
-            ? "This account has been deactivated. Please speak to your manager."
-            : /invalid/i.test(error.message)
-              ? "Incorrect email or password."
-              : error.message
-        );
-      }
-      // Valid password but no portal access → sign straight back out.
+      if (error || !data.user) throw new LoginError(error?.message ?? "Could not start your session.");
       const m = await fetchMember(data.user.id);
       if (!m.role) {
         await supabase.auth.signOut();
-        throw new Error(
-          "This account doesn't have portal access. Please ask your manager."
-        );
+        throw new LoginError("This account doesn't have portal access. Please ask your manager.");
       }
       qc.setQueryData(["auth-member", data.user.id], m);
     },
