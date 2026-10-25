@@ -334,7 +334,7 @@ export function StaffPage() {
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="sticky right-0 bg-[#231a14] px-3 py-3 text-right sm:static sm:px-4">Actions</th>
             </tr>
           }
         >
@@ -366,7 +366,7 @@ export function StaffPage() {
                 <td className="px-4 py-3">
                   <Badge tone={st.tone}>{st.label}</Badge>
                 </td>
-                <td className="px-4 py-3">
+                <td className="sticky right-0 bg-[#1a1410] px-3 py-3 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.6)] sm:static sm:bg-transparent sm:px-4 sm:shadow-none">
                   {canManage(m) ? (
                     <div className="flex justify-end gap-1">
                       <Button

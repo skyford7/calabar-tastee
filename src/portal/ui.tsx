@@ -69,14 +69,14 @@ export const Button = forwardRef<
 Button.displayName = "Button";
 
 const fieldBase =
-  "w-full rounded-lg border border-amber-900/40 bg-[#1a1410] px-3 text-sm text-amber-50 placeholder:text-amber-100/30 " +
+  "w-full rounded-lg border border-amber-900/40 bg-[#1a1410] px-3 text-base text-amber-50 sm:text-sm placeholder:text-amber-100/30 " +
   "focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/40 disabled:opacity-60";
 
 export const Input = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement>
 >(({ className, ...p }, ref) => (
-  <input ref={ref} className={cn(fieldBase, "h-10", className)} {...p} />
+  <input ref={ref} className={cn(fieldBase, "h-11 sm:h-10", className)} {...p} />
 ));
 Input.displayName = "Input";
 
@@ -92,7 +92,7 @@ export const Select = forwardRef<
   HTMLSelectElement,
   SelectHTMLAttributes<HTMLSelectElement>
 >(({ className, ...p }, ref) => (
-  <select ref={ref} className={cn(fieldBase, "h-10", className)} {...p} />
+  <select ref={ref} className={cn(fieldBase, "h-11 sm:h-10", className)} {...p} />
 ));
 Select.displayName = "Select";
 

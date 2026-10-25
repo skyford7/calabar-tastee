@@ -71,6 +71,7 @@ export function RosterPage() {
     [directoryAll]
   );
   const timeOff = useTimeOff();
+  const [dayPick, setDayPick] = useState<string | null>(null);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [holidaysOpen, setHolidaysOpen] = useState(false);
 
@@ -272,6 +273,62 @@ export function RosterPage() {
       .filter(s => s.staff_id === id)
       .reduce((h, s) => h + shiftHours(s.start_time, s.end_time), 0);
 
+  const renderCell = (p: { id: string; full_name: string }, d: string) => {
+    const cell = byCell.get(`${p.id}|${d}`) ?? [];
+    const off = offFor(timeOff.data ?? [], p.id, d);
+    return (
+                        <div className="space-y-1">
+      {off && (
+        <div className="truncate rounded-md bg-sky-500/15 px-2 py-1.5 text-xs text-sky-200" title={off.reason}>
+          {off.reason || "Holiday"}
+        </div>
+      )}
+      {cell.map(s => (
+        <button
+          key={s.id}
+          disabled={!can.manageShifts}
+          onClick={() => openEdit(s)}
+          className={cn(
+            "block w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+            s.status === "draft"
+              ? "border border-dashed border-amber-500/50 text-amber-200/80"
+              : "bg-amber-600/25 text-amber-100",
+            can.manageShifts && "hover:bg-amber-600/40"
+          )}
+        >
+          <div className="font-semibold">
+            {hhmm(s.start_time)}–{hhmm(s.end_time)}
+          </div>
+          {s.position && (
+            <div className="truncate opacity-80">
+              {s.position}
+            </div>
+          )}
+          {s.notes && (
+            <div className="truncate opacity-60">
+              {s.notes}
+            </div>
+          )}
+          {s.status === "draft" && (
+            <div className="text-[10px] uppercase tracking-wide opacity-70">
+              Draft
+            </div>
+          )}
+        </button>
+      ))}
+      {can.manageShifts && (
+        <button
+          onClick={() => openNew(p.id, d)}
+          className="flex h-9 w-full items-center justify-center rounded-md text-amber-100/20 md:h-7 hover:bg-amber-900/30 hover:text-amber-300"
+          aria-label={`Add shift for ${p.full_name} on ${d}`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+    );
+  };
+
   return (
     <>
       <PageHeader
@@ -360,7 +417,8 @@ export function RosterPage() {
       ) : !people.length ? (
         <EmptyState title="No shifts this week." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-amber-900/30">
+        <>
+        <div className="hidden overflow-x-auto rounded-xl border border-amber-900/30 md:block">
           <table className="w-full min-w-[860px] table-fixed text-sm">
             <thead className="bg-[#231a14]">
               <tr>
@@ -405,8 +463,6 @@ export function RosterPage() {
                     </div>
                   </td>
                   {days.map(d => {
-                    const cell = byCell.get(`${p.id}|${d}`) ?? [];
-                    const off = offFor(timeOff.data ?? [], p.id, d);
                     return (
                       <td
                         key={d}
@@ -415,55 +471,7 @@ export function RosterPage() {
                           d === today && "bg-amber-500/[0.03]"
                         )}
                       >
-                        <div className="space-y-1">
-                          {off && (
-                            <div className="truncate rounded-md bg-sky-500/15 px-2 py-1.5 text-xs text-sky-200" title={off.reason}>
-                              {off.reason || "Holiday"}
-                            </div>
-                          )}
-                          {cell.map(s => (
-                            <button
-                              key={s.id}
-                              disabled={!can.manageShifts}
-                              onClick={() => openEdit(s)}
-                              className={cn(
-                                "block w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                                s.status === "draft"
-                                  ? "border border-dashed border-amber-500/50 text-amber-200/80"
-                                  : "bg-amber-600/25 text-amber-100",
-                                can.manageShifts && "hover:bg-amber-600/40"
-                              )}
-                            >
-                              <div className="font-semibold">
-                                {hhmm(s.start_time)}–{hhmm(s.end_time)}
-                              </div>
-                              {s.position && (
-                                <div className="truncate opacity-80">
-                                  {s.position}
-                                </div>
-                              )}
-                              {s.notes && (
-                                <div className="truncate opacity-60">
-                                  {s.notes}
-                                </div>
-                              )}
-                              {s.status === "draft" && (
-                                <div className="text-[10px] uppercase tracking-wide opacity-70">
-                                  Draft
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                          {can.manageShifts && (
-                            <button
-                              onClick={() => openNew(p.id, d)}
-                              className="flex h-7 w-full items-center justify-center rounded-md text-amber-100/20 hover:bg-amber-900/30 hover:text-amber-300"
-                              aria-label={`Add shift for ${p.full_name} on ${d}`}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        {renderCell(p, d)}
                       </td>
                     );
                   })}
@@ -472,6 +480,54 @@ export function RosterPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Phones: one day at a time */}
+        <div className="md:hidden">
+          <div className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1">
+            {days.map(d => {
+              const sel = d === (dayPick && days.includes(dayPick) ? dayPick : days.includes(today) ? today : days[0]);
+              return (
+                <button
+                  key={d}
+                  onClick={() => setDayPick(d)}
+                  className={cn(
+                    "flex min-w-[3.25rem] flex-1 flex-col items-center rounded-lg border px-2 py-2 text-xs",
+                    sel
+                      ? "border-amber-500 bg-amber-500/20 text-amber-200"
+                      : "border-amber-900/40 text-amber-100/60",
+                    d === today && !sel && "text-amber-400"
+                  )}
+                >
+                  <span>{formatDay(d, { weekday: "short" })}</span>
+                  <span className="text-base font-semibold">{formatDay(d, { day: "numeric" })}</span>
+                </button>
+              );
+            })}
+          </div>
+          {(() => {
+            const d = dayPick && days.includes(dayPick) ? dayPick : days.includes(today) ? today : days[0];
+            return (
+              <ul className="space-y-3">
+                {people.map(p => (
+                  <li key={p.id} className="rounded-xl border border-amber-900/30 bg-[#1a1410] p-3">
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-white">
+                          {p.full_name || "Unnamed"}
+                          {p.id === profile?.id && <span className="ml-1 text-xs text-amber-500">(you)</span>}
+                        </div>
+                        <div className="truncate text-xs text-amber-100/40">{p.job_title || "—"}</div>
+                      </div>
+                      <div className="flex-shrink-0 text-xs text-amber-100/40">{hoursFor(p.id).toFixed(1)}h this week</div>
+                    </div>
+                    {renderCell(p, d)}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </div>
+        </>
       )}
 
       <RepeatShiftsModal
