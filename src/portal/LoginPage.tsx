@@ -3,8 +3,9 @@ import { Navigate, useLocation } from "react-router";
 import { ArrowLeft, ChefHat, KeyRound, Lock, ShieldAlert, User } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { LoginError, lookupUsername, type LookupResult } from "@/lib/authApi";
-import { isAdminHost, isConfigured, portalPath } from "@/lib/env";
+import { SITE_ORIGIN, isConfigured, portalPath } from "@/lib/env";
 import { Button, Field, Input } from "./ui";
+import { OtpBoxes } from "./OtpBoxes";
 
 type Step = { kind: "username" } | { kind: "secret"; username: string; lookup: LookupResult };
 
@@ -136,20 +137,21 @@ export function LoginPage() {
                 <ArrowLeft className="h-4 w-4" /> {step.username}
               </button>
               {isCode ? (
-                <Field label={`${codeLength}-digit access code`}>
-                  <Input
-                    ref={secretRef}
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    autoComplete="one-time-code"
-                    maxLength={codeLength}
-                    required
-                    className="h-14 text-center font-mono text-2xl tracking-[0.5em]"
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="font-semibold text-white">Enter your access code</div>
+                    <p className="mt-1 text-xs text-amber-100/50">Your {codeLength}-digit code for @{step.username}</p>
+                  </div>
+                  <OtpBoxes
+                    length={codeLength}
                     value={secret}
-                    onChange={e => setSecret(e.target.value.replace(/\D/g, "").slice(0, codeLength))}
+                    onChange={setSecret}
+                    autoFocus
+                    invalid={!!error}
+                    disabled={busy}
+                    label={`${codeLength}-digit access code`}
                   />
-                </Field>
+                </div>
               ) : (
                 <Field label="Password">
                   <Input
@@ -177,13 +179,11 @@ export function LoginPage() {
           )}
         </div>
 
-        {!isAdminHost && (
-          <p className="mt-6 text-center text-sm">
-            <a href="/" className="text-amber-100/50 hover:text-amber-300">
-              ← Back to calabartastee.com
-            </a>
-          </p>
-        )}
+        <p className="mt-6 text-center text-sm">
+          <a href={SITE_ORIGIN} className="text-amber-100/50 hover:text-amber-300">
+            ← Back to calabartastee.com
+          </a>
+        </p>
       </div>
     </div>
   );

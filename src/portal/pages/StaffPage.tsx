@@ -6,7 +6,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { qk } from "@/lib/queries";
 import { checkSecret, generateCode } from "@/lib/authApi";
-import { createStaff, generatePassword, suggestUsername, updateStaff } from "@/lib/staffApi";
+import { createStaff, generatePassword, joinName, splitName, suggestUsername, updateStaff } from "@/lib/staffApi";
 import { ROLE_LABEL, type AppRole, type LoginMethod, type Profile, type TeamMember } from "@/lib/types";
 import { portalPath } from "@/lib/env";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,8 @@ type DetailsForm = {
   username: string;
   usernameTouched: boolean;
   email: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   phone: string;
   job_title: string;
   role: AppRole;
@@ -165,7 +166,7 @@ export function StaffPage() {
         await updateStaff({
           user_id: f.id,
           username: f.username.trim().toLowerCase(),
-          full_name: f.full_name,
+          full_name: joinName(f.first_name, f.last_name),
           phone: f.phone || null,
           job_title: f.job_title || null,
           ...(can.manageRoles ? { role: f.role } : {}),
@@ -176,7 +177,7 @@ export function StaffPage() {
         await createStaff({
           username: f.username.trim().toLowerCase(),
           email: f.email,
-          full_name: f.full_name,
+          full_name: joinName(f.first_name, f.last_name),
           phone: f.phone || undefined,
           job_title: f.job_title || undefined,
           role: can.manageRoles ? f.role : "staff",
@@ -188,7 +189,7 @@ export function StaffPage() {
       toast.success(f.id ? "Account updated" : "Account created");
       if (!f.id) {
         setShown({
-          name: f.full_name,
+          name: joinName(f.first_name, f.last_name),
           username: f.username.trim().toLowerCase(),
           method: f.cred.method,
           secret: f.cred.secret,
@@ -279,7 +280,8 @@ export function StaffPage() {
                 username: "",
                 usernameTouched: false,
                 email: "",
-                full_name: "",
+                first_name: "",
+                last_name: "",
                 phone: "",
                 job_title: "",
                 role: "staff",
@@ -360,7 +362,8 @@ export function StaffPage() {
                             username: m.username ?? "",
                             usernameTouched: true,
                             email: m.email,
-                            full_name: m.full_name,
+                            first_name: splitName(m.full_name).first,
+                            last_name: splitName(m.full_name).last,
                             phone: m.phone ?? "",
                             job_title: m.job_title ?? "",
                             role: m.role ?? "staff",
@@ -424,16 +427,30 @@ export function StaffPage() {
       >
         {form && (
           <form id="staff-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" className="sm:col-span-2">
+            <Field label="First name">
               <Input
                 required
-                maxLength={120}
-                value={form.full_name}
+                maxLength={60}
+                value={form.first_name}
                 onChange={e =>
                   setForm({
                     ...form,
-                    full_name: e.target.value,
-                    username: form.usernameTouched ? form.username : suggestUsername(e.target.value),
+                    first_name: e.target.value,
+                    username: form.usernameTouched ? form.username : suggestUsername(joinName(e.target.value, form.last_name)),
+                  })
+                }
+              />
+            </Field>
+            <Field label="Surname">
+              <Input
+                required
+                maxLength={60}
+                value={form.last_name}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    last_name: e.target.value,
+                    username: form.usernameTouched ? form.username : suggestUsername(joinName(form.first_name, e.target.value)),
                   })
                 }
               />
@@ -464,7 +481,7 @@ export function StaffPage() {
             <Field label="Job title" hint="e.g. Chef, Front of house">
               <Input maxLength={60} value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} />
             </Field>
-            <Field label="Phone">
+            <Field label="Phone number" hint="Optional">
               <Input type="tel" maxLength={30} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             </Field>
             <Field

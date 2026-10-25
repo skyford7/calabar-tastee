@@ -64,3 +64,11 @@ export function suggestUsername(fullName: string): string {
     .replace(/^\.+|\.+$/g, "")
     .slice(0, 30);
 }
+
+/** Names are stored as one "full_name"; the forms show first name + surname. */
+export function splitName(full: string | null | undefined): { first: string; last: string } {
+  const t = (full ?? "").trim().replace(/\s+/g, " ");
+  const i = t.indexOf(" ");
+  return i === -1 ? { first: t, last: "" } : { first: t.slice(0, i), last: t.slice(i + 1) };
+}
+export const joinName = (first: string, last: string) => `${first.trim()} ${last.trim()}`.trim();

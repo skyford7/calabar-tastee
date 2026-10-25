@@ -19,7 +19,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
-import { isAdminHost, portalPath } from "@/lib/env";
+import { SITE_ORIGIN, portalPath } from "@/lib/env";
 import { ROLE_LABEL } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -137,14 +137,12 @@ export function PortalLayout() {
           {role ? ROLE_LABEL[role] : ""}
         </div>
       </div>
-      {!isAdminHost && (
-        <a
-          href="/"
-          className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-amber-100/60 hover:text-amber-200"
-        >
-          <ExternalLink className="h-4 w-4" /> View website
-        </a>
-      )}
+      <a
+        href={SITE_ORIGIN}
+        className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-amber-100/60 hover:text-amber-200"
+      >
+        <ExternalLink className="h-4 w-4" /> View website
+      </a>
       <button
         onClick={() => void signOut()}
         className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-300 hover:bg-red-900/20"

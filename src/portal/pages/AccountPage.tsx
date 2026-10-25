@@ -3,13 +3,15 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { ROLE_LABEL } from "@/lib/types";
+import { joinName, splitName } from "@/lib/staffApi";
 import { CredentialForm } from "../CredentialForm";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../ui";
 
 export function AccountPage() {
   const { profile, role, refresh } = useAuth();
   const [details, setDetails] = useState(() => ({
-    full_name: profile?.full_name ?? "",
+    first_name: splitName(profile?.full_name).first,
+    last_name: splitName(profile?.full_name).last,
     phone: profile?.phone ?? "",
   }));
   const [savingDetails, setSavingDetails] = useState(false);
@@ -20,7 +22,7 @@ export function AccountPage() {
     setSavingDetails(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ full_name: details.full_name.trim(), phone: details.phone.trim() || null })
+      .update({ full_name: joinName(details.first_name, details.last_name), phone: details.phone.trim() || null })
       .eq("id", profile.id);
     setSavingDetails(false);
     if (error) return toast.error(errorMessage(error));
@@ -38,21 +40,31 @@ export function AccountPage() {
             {role && <Badge tone="amber">{ROLE_LABEL[role]}</Badge>}
           </div>
           <form onSubmit={saveDetails} className="space-y-4">
-            <Field label="Username" hint="You sign in with this. Ask a manager if it needs to change.">
+            <Field label="Username" hint="You sign in with this. Only an Admin or Database Administrator can change it.">
               <Input value={profile?.username ?? ""} disabled />
             </Field>
             <Field label="Email (for contact)">
               <Input value={profile?.email ?? ""} disabled />
             </Field>
-            <Field label="Full name">
-              <Input
-                required
-                maxLength={120}
-                value={details.full_name}
-                onChange={e => setDetails({ ...details, full_name: e.target.value })}
-              />
-            </Field>
-            <Field label="Phone">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="First name">
+                <Input
+                  required
+                  maxLength={60}
+                  value={details.first_name}
+                  onChange={e => setDetails({ ...details, first_name: e.target.value })}
+                />
+              </Field>
+              <Field label="Surname">
+                <Input
+                  required
+                  maxLength={60}
+                  value={details.last_name}
+                  onChange={e => setDetails({ ...details, last_name: e.target.value })}
+                />
+              </Field>
+            </div>
+            <Field label="Phone number">
               <Input
                 type="tel"
                 maxLength={30}

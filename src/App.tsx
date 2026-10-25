@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import { ADMIN_ORIGIN, isAdminHost, portalPath } from "@/lib/env";
+import { ADMIN_ORIGIN, isAdminHost } from "@/lib/env";
 import { HomePage } from "@/pages/HomePage";
 import { PageLoader } from "@/portal/ui";
 
@@ -11,45 +11,40 @@ function PortalFallback() {
   return <PageLoader />;
 }
 
-/** Phase 2: /admin/* on the main site forwards to admin.calabartastee.com/*. */
+/** The public site has no /admin: forward old links to admin.calabartastee.com. */
 function RedirectToAdminHost() {
   const { pathname, search } = useLocation();
   useEffect(() => {
-    const rest = pathname.replace(/^\/admin/, "") || "/";
-    window.location.replace(`${ADMIN_ORIGIN}${rest}${search}`);
+    const rest = pathname.replace(/^\/(admin|login)/, "") || "/";
+    const to = pathname.startsWith("/login") ? `/login${rest === "/" ? "" : rest}` : rest;
+    window.location.replace(`${ADMIN_ORIGIN}${to}${search}`);
   }, [pathname, search]);
   return <PortalFallback />;
 }
 
 export default function App() {
-  const portal = (
-    <Suspense fallback={<PortalFallback />}>
-      <PortalRoutes />
-    </Suspense>
-  );
-
   // admin.calabartastee.com — only the portal is served, at the root.
   if (isAdminHost) {
     return (
       <Routes>
-        <Route path="/*" element={portal} />
+        <Route
+          path="/*"
+          element={
+            <Suspense fallback={<PortalFallback />}>
+              <PortalRoutes />
+            </Suspense>
+          }
+        />
       </Routes>
     );
   }
 
-  // calabartastee.com — public site, plus the portal at /admin (Phase 1) or a redirect (Phase 2).
+  // calabartastee.com — public site only.
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route
-        path="/admin/*"
-        element={ADMIN_ORIGIN ? <RedirectToAdminHost /> : portal}
-      />
-      {/* Old links */}
-      <Route
-        path="/login"
-        element={<Navigate to={portalPath("/login")} replace />}
-      />
+      <Route path="/admin/*" element={<RedirectToAdminHost />} />
+      <Route path="/login" element={<RedirectToAdminHost />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

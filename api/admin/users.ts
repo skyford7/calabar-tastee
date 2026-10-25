@@ -210,6 +210,9 @@ async function handleUpdate(caller: Caller, body: unknown) {
     throw new HttpError(400, "You can't change your own role or active status.");
   }
   if (!isSelf) assertCanManage(caller, targetRole);
+  if (input.username !== undefined && caller.role !== "admin" && caller.role !== "dba") {
+    throw new HttpError(403, "Only an Admin or Database Administrator can change a username.");
+  }
   if (input.role !== undefined && input.role !== targetRole && caller.role !== "dba") {
     throw new HttpError(403, "Only a Database Administrator can change roles.");
   }

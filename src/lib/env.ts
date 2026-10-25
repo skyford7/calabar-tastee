@@ -1,12 +1,9 @@
 /**
  * Runtime configuration + staff-portal hosting rules.
  *
- * Phase 1 — NEXT_PUBLIC_ADMIN_ORIGIN empty:
- *   portal at https://calabartastee.com/admin/*
- *
- * Phase 2 — NEXT_PUBLIC_ADMIN_ORIGIN=https://admin.calabartastee.com:
- *   portal at https://admin.calabartastee.com/*
- *   https://calabartastee.com/admin/* redirects there.
+ * The staff portal lives only at https://admin.calabartastee.com (served at the root).
+ * The public site (calabartastee.com) has no /admin — old /admin and /login links
+ * forward to the admin subdomain.
  */
 
 const trimSlash = (s: string) => s.replace(/\/+$/, "");
@@ -14,7 +11,7 @@ const trimSlash = (s: string) => s.replace(/\/+$/, "");
 export const SUPABASE_URL = import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const ADMIN_ORIGIN = trimSlash(
-  import.meta.env.NEXT_PUBLIC_ADMIN_ORIGIN ?? ""
+  import.meta.env.NEXT_PUBLIC_ADMIN_ORIGIN || "https://admin.calabartastee.com"
 );
 export const AUTH_COOKIE_DOMAIN = (
   import.meta.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN ?? ""
@@ -25,24 +22,16 @@ export const isConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 /** True when this page is being served from the dedicated admin subdomain. */
 export const isAdminHost =
   typeof window !== "undefined" &&
-  (ADMIN_ORIGIN
-    ? window.location.origin === ADMIN_ORIGIN
-    : window.location.hostname.startsWith("admin."));
+  (window.location.origin === ADMIN_ORIGIN ||
+    window.location.hostname.startsWith("admin."));
 
-/** Path prefix of the portal on the current host: "" on the subdomain, "/admin" on the main site. */
-export const PORTAL_BASE = isAdminHost ? "" : "/admin";
-
-/** Build a portal URL: portalPath("/menu") → "/admin/menu" or "/menu". */
+/** Build a portal URL (the portal is always at the root of the admin host). */
 export function portalPath(path = "/"): string {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  if (!PORTAL_BASE) return p;
-  return p === "/" ? PORTAL_BASE : `${PORTAL_BASE}${p}`;
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 /** Where the "Staff login" link on the public site should point. */
-export const staffLoginHref = ADMIN_ORIGIN
-  ? `${ADMIN_ORIGIN}/login`
-  : "/admin/login";
+export const staffLoginHref = `${ADMIN_ORIGIN}/login`;
 
 /** Only use the shared cookie domain when we are actually on that domain. */
 export function cookieDomainForHost(): string | undefined {
@@ -53,3 +42,9 @@ export function cookieDomainForHost(): string | undefined {
     ? AUTH_COOKIE_DOMAIN
     : undefined;
 }
+
+/** The public website, derived from the admin host (admin.example.com → www.example.com). */
+export const SITE_ORIGIN =
+  typeof window !== "undefined" && window.location.hostname.startsWith("admin.")
+    ? window.location.origin.replace("//admin.", "//www.")
+    : "https://www.calabartastee.com";

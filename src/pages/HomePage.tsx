@@ -502,11 +502,6 @@ export function HomePage() {
             </a>
           </div>
           <div className="flex items-center justify-center gap-3 text-sm text-amber-100/60">
-            <div className="flex -space-x-3">
-              {(["customer-1.jpg", "customer-2.jpg", "customer-3.jpg", "customer-4.jpg"] as const).map(f => (
-                <SitePhoto key={f} src={siteImage(f)} alt="Happy customer" className="h-10 w-10 rounded-full border-2 border-[#1a1410] object-cover shadow-md" />
-              ))}
-            </div>
             <span className="font-medium">Join 500+ happy customers</span>
           </div>
         </div>

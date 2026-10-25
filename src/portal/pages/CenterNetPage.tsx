@@ -1,3 +1,4 @@
+import { Bell, Megaphone, MessageCircle, Pin } from "lucide-react";
 import { PageHeader } from "../ui";
 
 /** Center Net is paused: show an animated maintenance screen until it is switched back on. */
@@ -33,6 +34,34 @@ export function CenterNetPage() {
           {[0, 1, 2].map(i => (
             <span key={i} className="cn-anim inline-block h-1.5 w-1.5 rounded-full bg-amber-400" style={{ animation: `cn-dot 1.4s ${i * 0.2}s infinite ease-in-out` }} />
           ))}
+        </p>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-amber-900/30 bg-[#1a1410] p-6">
+        <h3 className="text-lg font-semibold text-white">What happens when Center Net launches</h3>
+        <p className="mt-1 text-sm text-amber-100/60">
+          Center Net becomes the one place where the whole team hears from management. Here is what you can expect:
+        </p>
+        <ul className="mt-5 grid gap-4 sm:grid-cols-2">
+          {[
+            { icon: Megaphone, title: "Announcements", text: "Admins and Database Administrators post updates for the whole team: rota changes, specials, deliveries, reminders." },
+            { icon: Pin, title: "Pinned posts", text: "Important notices can be pinned so they stay at the top until they are no longer needed." },
+            { icon: MessageCircle, title: "Comments", text: "Everyone on the team can reply to a post, ask questions and confirm they have seen it." },
+            { icon: Bell, title: "Always up to date", text: "New posts show as soon as you open the portal, so nothing gets lost in group chats." },
+          ].map(({ icon: Icon, title, text }) => (
+            <li key={title} className="flex gap-3 rounded-xl border border-amber-900/30 bg-[#231a14] p-4">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="font-medium text-white">{title}</div>
+                <p className="mt-0.5 text-sm text-amber-100/60">{text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-5 text-sm text-amber-100/50">
+          Nothing is needed from you for now. When it is ready, this page turns into the live feed.
         </p>
       </div>
     </div>

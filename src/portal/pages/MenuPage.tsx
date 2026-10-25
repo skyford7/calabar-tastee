@@ -444,13 +444,6 @@ function ItemForm({
             onChange={e => set("dietary", e.target.value)}
           />
         </Field>
-        <Field label="Sort order" hint="Lower numbers show first">
-          <Input
-            type="number"
-            value={draft.sort_order}
-            onChange={e => set("sort_order", Number(e.target.value))}
-          />
-        </Field>
 
         <div className="sm:col-span-2">
           <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-amber-100/60">

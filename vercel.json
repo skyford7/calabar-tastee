@@ -17,10 +17,6 @@
       ]
     },
     {
-      "source": "/admin/(.*)",
-      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
-    },
-    {
       "source": "/(.*)",
       "has": [{ "type": "host", "value": "admin.calabartastee.com" }],
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]

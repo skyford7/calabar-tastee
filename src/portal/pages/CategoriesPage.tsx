@@ -154,7 +154,6 @@ export function CategoriesPage() {
         <Table
           head={
             <tr>
-              <th className="px-4 py-3">Order</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Dishes</th>
               <th className="px-4 py-3">Status</th>
@@ -164,7 +163,6 @@ export function CategoriesPage() {
         >
           {cats.data.map(c => (
             <tr key={c.id} className="text-amber-100/80">
-              <td className="px-4 py-3 text-amber-100/50">{c.sort_order}</td>
               <td className="px-4 py-3">
                 <div className="font-medium text-white">{c.name}</div>
                 {c.description && (
@@ -259,15 +257,6 @@ export function CategoriesPage() {
                 value={draft.description}
                 onChange={e =>
                   setDraft({ ...draft, description: e.target.value })
-                }
-              />
-            </Field>
-            <Field label="Sort order" hint="Lower numbers show first">
-              <Input
-                type="number"
-                value={draft.sort_order}
-                onChange={e =>
-                  setDraft({ ...draft, sort_order: Number(e.target.value) })
                 }
               />
             </Field>
