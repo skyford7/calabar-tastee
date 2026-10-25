@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import type { Category, DirectoryEntry, MenuItem, OpeningHours } from "./types";
+import { menuImage } from "./siteImages";
 
 export const qk = {
   categories: ["categories"] as const,
@@ -46,6 +47,8 @@ export const useMenuItems = () =>
           .select("*")
           .order("sort_order")
           .order("name")
+      ).then(rows =>
+        rows.map(r => ({ ...r, image_url: menuImage(r.image_url) }))
       ),
   });
 
