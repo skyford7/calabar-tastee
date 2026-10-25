@@ -9,6 +9,7 @@ import {
   compressImage,
   fileNameOf,
   isHosted,
+  menuImage,
   siteImage,
   storagePublicUrl,
 } from "@/lib/siteImages";
@@ -179,7 +180,7 @@ export function PhotosPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {items.map(i => (
             <div key={i.id} className="overflow-hidden rounded-xl border border-amber-900/30 bg-[#231a14]">
-              <div className="h-28">{i.image_url ? <Thumb src={i.image_url} alt={i.name} /> : <Thumb src="" alt="" />}</div>
+              <div className="h-28">{i.image_url ? <Thumb src={menuImage(i.image_url) ?? ""} alt={i.name} /> : <Thumb src="" alt="" />}</div>
               <div className="px-3 py-2">
                 <div className="truncate text-xs font-medium text-white">{i.name}</div>
                 <div className="truncate font-mono text-[11px] text-amber-100/40">

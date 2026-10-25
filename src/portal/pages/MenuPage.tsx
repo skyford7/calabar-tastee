@@ -15,6 +15,7 @@ import { MENU_IMAGES_BUCKET, errorMessage, supabase } from "@/lib/supabase";
 import { qk, useCategories, useMenuItems } from "@/lib/queries";
 import { formatPrice } from "@/lib/format";
 import type { MenuItem } from "@/lib/types";
+import { menuImage } from "@/lib/siteImages";
 import {
   Badge,
   Button,
@@ -224,7 +225,7 @@ export function MenuPage() {
               <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#2a1f18]">
                 {i.image_url ? (
                   <img
-                    src={i.image_url}
+                    src={menuImage(i.image_url) ?? undefined}
                     alt=""
                     className="h-full w-full object-cover"
                     loading="lazy"
@@ -459,7 +460,7 @@ function ItemForm({
             <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-[#2a1f18]">
               {draft.image_url ? (
                 <img
-                  src={draft.image_url}
+                  src={menuImage(draft.image_url) ?? undefined}
                   alt=""
                   className="h-full w-full object-cover"
                 />

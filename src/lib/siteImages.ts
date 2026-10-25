@@ -19,9 +19,35 @@ export function storagePublicUrl(path: string): string {
   return `${SUPABASE_URL}/storage/v1/object/public/${MENU_IMAGES_BUCKET}/${path}`;
 }
 
+/** Photos shipped with the website itself (public/photos/<name>.webp). */
+const BUNDLED = new Set([
+  "about-image-1", "about-image-2", "abula", "afang-soup-new", "amstel-malt", "appletiser",
+  "ayamase-ofada-stew", "ayamase", "bottled-water", "catfish-pepper-soup", "coca-cola",
+  "coconut-rice-new", "customer-1", "customer-2", "customer-3", "customer-4", "eba",
+  "edikaikong-new", "efo-riro-new", "egusi-soup-new", "ekpang-nkwkwo", "fanta", "founder",
+  "fried-plantain", "fried-rice", "goat-head-isi-ewu", "grilled-chicken", "grilled-fish",
+  "jollof-rice-plantain", "jollof-rice", "malta-guinness", "meatpie", "moi-moi-new",
+  "ogbono-soup-new", "okra-soup-new", "pepper-soup-goat", "peppered-snail", "poundo-yam",
+  "puffpuff", "restaurant-hero", "rice-and-stew", "san-pellegrino-lemon",
+  "san-pellegrino-orange", "sprite", "stew-beef", "stew-chicken", "suya-new",
+  "vegetarian-beans-dodo", "zobo-small",
+]);
+
+function bundled(fileName: string): string | null {
+  const stem = fileName.replace(/\.[a-z0-9]+$/i, "");
+  return BUNDLED.has(stem) ? `/photos/${stem}.webp` : null;
+}
+
 /** Public URL of a website photo. */
 export function siteImage(file: SiteImageFile): string {
-  return storagePublicUrl(`site/${file}`);
+  return bundled(file) ?? storagePublicUrl(`site/${file}`);
+}
+
+/** URL to show for a dish photo: an uploaded photo if there is one, otherwise the built-in copy. */
+export function menuImage(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (isHosted(url)) return url;
+  return bundled(fileNameOf(url)) ?? url;
 }
 
 /** True when an image URL points at our own storage (not the old site). */

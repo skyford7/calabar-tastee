@@ -15,7 +15,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useCategories, useMenuItems, useOpeningHours } from "@/lib/queries";
 import { formatPrice, hhmm, londonNow } from "@/lib/format";
-import { siteImage } from "@/lib/siteImages";
+import { menuImage, siteImage } from "@/lib/siteImages";
 import type { MenuItem, OpeningHours } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -627,7 +627,7 @@ export function HomePage() {
               bestSellers.map(item => (
                 <div key={item.id} className="group flex flex-col overflow-hidden rounded-2xl border border-amber-500/40 bg-[#231a14] shadow-lg shadow-amber-900/10 transition-all hover:border-amber-400">
                   <div className="relative h-52 flex-shrink-0 overflow-hidden">
-                    <Photo src={item.image_url} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <Photo src={menuImage(item.image_url)} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     <Badges item={item} bestSellerSection />
                   </div>
                   <div className="flex flex-grow flex-col p-5">
@@ -674,7 +674,7 @@ export function HomePage() {
               filtered.map(item => (
                 <div key={item.id} className="group flex flex-col overflow-hidden rounded-2xl border border-amber-900/30 bg-[#1a1410] transition-all hover:border-amber-500/50">
                   <div className="relative h-48 flex-shrink-0 overflow-hidden">
-                    <Photo src={item.image_url} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <Photo src={menuImage(item.image_url)} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     <Badges item={item} />
                   </div>
                   <div className="flex flex-grow flex-col p-5">
