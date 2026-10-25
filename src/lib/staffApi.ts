@@ -26,7 +26,7 @@ export type UpdateStaffInput = {
   job_title?: string | null;
 };
 
-async function call<T>(method: "POST" | "PATCH", body: unknown): Promise<T> {
+async function call<T>(method: "POST" | "PATCH" | "DELETE", body: unknown): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Your session has expired. Please sign in again.");
@@ -42,6 +42,7 @@ async function call<T>(method: "POST" | "PATCH", body: unknown): Promise<T> {
 }
 
 export const createStaff = (input: CreateStaffInput) => call<{ user_id: string }>("POST", input);
+export const deleteStaff = (user_id: string) => call<{ ok: true }>("DELETE", { user_id });
 export const updateStaff = (input: UpdateStaffInput) => call<{ ok: true }>("PATCH", input);
 
 /** Readable random temporary password, e.g. "plantain-7Kq2-jollof". */

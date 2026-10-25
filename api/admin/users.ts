@@ -3,6 +3,7 @@
  *
  *   POST  /api/admin/users   create an account + role  (admin: staff only, dba: any role)
  *   PATCH /api/admin/users   update details / role / suspend / sign-in credentials
+ *   DELETE /api/admin/users  permanently delete an account (admin: staff only, dba: anyone but self)
  *
  * Staff sign in with a USERNAME and either a password or a 4/6/8-digit access
  * code (see /api/auth/login). Email is kept for contact only. The Supabase Auth
@@ -267,6 +268,16 @@ async function handleUpdate(caller: Caller, body: unknown) {
   return json(200, { ok: true });
 }
 
+async function handleDelete(caller: Caller, body: unknown) {
+  const { user_id } = z.object({ user_id: z.string().uuid() }).parse(body);
+  if (user_id === caller.id) throw new HttpError(400, "You can't delete your own account.");
+  const db = adminClient(caller.id);
+  assertCanManage(caller, await roleOf(db, user_id));
+  const { error } = await db.auth.admin.deleteUser(user_id);
+  if (error) throw new HttpError(400, error.message);
+  return json(200, { ok: true });
+}
+
 async function handle(request: Request, fn: (caller: Caller, body: unknown) => Promise<Response>) {
   try {
     const caller = await authenticate(request);
@@ -284,6 +295,10 @@ async function handle(request: Request, fn: (caller: Caller, body: unknown) => P
 
 export function POST(request: Request) {
   return handle(request, handleCreate);
+}
+
+export function DELETE(request: Request) {
+  return handle(request, handleDelete);
 }
 
 export function PATCH(request: Request) {

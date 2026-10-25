@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, Copy, KeyRound, Pencil, RotateCcw, UserPlus, Wand2 } from "lucide-react";
+import { Ban, Copy, KeyRound, Pencil, RotateCcw, Trash2, UserPlus, Wand2 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { qk } from "@/lib/queries";
 import { checkSecret, generateCode } from "@/lib/authApi";
-import { createStaff, generatePassword, joinName, splitName, suggestUsername, updateStaff } from "@/lib/staffApi";
+import { createStaff, deleteStaff, generatePassword, joinName, splitName, suggestUsername, updateStaff } from "@/lib/staffApi";
 import { ROLE_LABEL, type AppRole, type LoginMethod, type Profile, type TeamMember } from "@/lib/types";
 import { portalPath } from "@/lib/env";
 import { cn } from "@/lib/utils";
@@ -236,6 +236,26 @@ export function StaffPage() {
     onError: e => toast.error(errorMessage(e)),
   });
 
+  const removeStaff = useMutation({
+    mutationFn: (m: TeamMember) => deleteStaff(m.id),
+    onSuccess: (_r, m) => {
+      toast.success(`${m.full_name} deleted`);
+      void refresh();
+      void qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
+    onError: e => toast.error(errorMessage(e)),
+  });
+
+  const onDelete = async (m: TeamMember) => {
+    const ok = await confirm({
+      title: "Delete this account?",
+      message: `${m.full_name} will be permanently deleted, along with their shifts. This can't be undone. To keep their history, suspend them instead.`,
+      confirmLabel: "Delete permanently",
+      danger: true,
+    });
+    if (ok) removeStaff.mutate(m);
+  };
+
   const onToggleActive = async (m: TeamMember) => {
     const active = !m.is_active;
     const ok = await confirm({
@@ -392,6 +412,15 @@ export function StaffPage() {
                         onClick={() => void onToggleActive(m)}
                       >
                         {m.is_active ? <Ban className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Delete permanently"
+                        className="text-red-400"
+                        onClick={() => void onDelete(m)}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   ) : (

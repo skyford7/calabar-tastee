@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { ROLE_LABEL } from "@/lib/types";
-import { joinName, splitName } from "@/lib/staffApi";
+import { joinName, splitName, updateStaff } from "@/lib/staffApi";
 import { CredentialForm } from "../CredentialForm";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../ui";
 
@@ -13,13 +13,24 @@ export function AccountPage() {
     first_name: splitName(profile?.full_name).first,
     last_name: splitName(profile?.full_name).last,
     phone: profile?.phone ?? "",
+    username: profile?.username ?? "",
   }));
+  const canRename = role === "admin" || role === "dba";
   const [savingDetails, setSavingDetails] = useState(false);
 
   const saveDetails = async (e: FormEvent) => {
     e.preventDefault();
     if (!profile) return;
     setSavingDetails(true);
+    const newName = details.username.trim().toLowerCase();
+    if (canRename && newName && newName !== profile.username) {
+      try {
+        await updateStaff({ user_id: profile.id, username: newName });
+      } catch (err) {
+        setSavingDetails(false);
+        return toast.error(errorMessage(err));
+      }
+    }
     const { error } = await supabase
       .from("profiles")
       .update({ full_name: joinName(details.first_name, details.last_name), phone: details.phone.trim() || null })
@@ -41,7 +52,12 @@ export function AccountPage() {
           </div>
           <form onSubmit={saveDetails} className="space-y-4">
             <Field label="Username">
-              <Input value={profile?.username ?? ""} disabled />
+              <Input
+                value={canRename ? details.username : (profile?.username ?? "")}
+                disabled={!canRename}
+                maxLength={30}
+                onChange={e => setDetails({ ...details, username: e.target.value.toLowerCase().replace(/\s/g, "") })}
+              />
             </Field>
             <Field label="Email (for contact)">
               <Input value={profile?.email ?? ""} disabled />
