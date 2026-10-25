@@ -593,7 +593,7 @@ export function HomePage() {
         <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-16">
             <div className="mx-auto w-full max-w-md">
-              <Photo src={siteImage("founder.jpg")} alt="Meet the Founder of Calabar Tastee" className="mx-auto aspect-square w-full max-w-sm rounded-full border-4 border-amber-500/40 object-cover shadow-2xl shadow-amber-900/30" />
+              <Photo src={siteImage("founder.jpg")} alt="Meet the Founder of Calabar Tastee" className="aspect-[3/4] w-full rounded-2xl border border-amber-500/30 object-contain shadow-2xl shadow-amber-900/20" />
             </div>
             <div className="text-center md:text-left">
               <span className="text-sm font-semibold uppercase tracking-wider text-amber-500">Our Story</span>
