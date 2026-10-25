@@ -1,8 +1,9 @@
 import { Bell, Megaphone, MessageCircle, Pin } from "lucide-react";
 import { PageHeader } from "../ui";
+import { CenterNetFeed } from "./CenterNetFeed";
 
 /** Center Net is paused: show an animated construction screen until it is switched back on. */
-export function CenterNetPage() {
+function CenterNetMaintenance() {
   return (
     <div>
       <PageHeader title="Center Net" description="Team announcements and updates" />
@@ -91,4 +92,9 @@ export function CenterNetPage() {
       </div>
     </div>
   );
+}
+
+/** Shows the live feed once its database tables exist; until then the construction screen. */
+export function CenterNetPage() {
+  return <CenterNetFeed fallback={<CenterNetMaintenance />} />;
 }
