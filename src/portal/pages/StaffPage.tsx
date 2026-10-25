@@ -9,6 +9,7 @@ import { checkSecret, generateCode } from "@/lib/authApi";
 import { createStaff, deleteStaff, generatePassword, joinName, splitName, suggestUsername, updateStaff } from "@/lib/staffApi";
 import { ROLE_LABEL, type AppRole, type LoginMethod, type Profile, type TeamMember } from "@/lib/types";
 import { portalPath } from "@/lib/env";
+import { OtpBoxes } from "../OtpBoxes";
 import { cn } from "@/lib/utils";
 import {
   Badge,
@@ -236,9 +237,12 @@ export function StaffPage() {
     onError: e => toast.error(errorMessage(e)),
   });
 
+  const [del, setDel] = useState<{ m: TeamMember; word: string; secret: string } | null>(null);
+
   const removeStaff = useMutation({
-    mutationFn: (m: TeamMember) => deleteStaff(m.id),
-    onSuccess: (_r, m) => {
+    mutationFn: (v: { m: TeamMember; secret: string }) => deleteStaff(v.m.id, v.secret),
+    onSuccess: (_r, { m }) => {
+      setDel(null);
       toast.success(`${m.full_name} deleted`);
       void refresh();
       void qc.invalidateQueries({ queryKey: ["shifts"] });
@@ -246,15 +250,10 @@ export function StaffPage() {
     onError: e => toast.error(errorMessage(e)),
   });
 
-  const onDelete = async (m: TeamMember) => {
-    const ok = await confirm({
-      title: "Delete this account?",
-      message: `${m.full_name} will be permanently deleted, along with their shifts. This can't be undone. To keep their history, suspend them instead.`,
-      confirmLabel: "Delete permanently",
-      danger: true,
-    });
-    if (ok) removeStaff.mutate(m);
-  };
+  const onDelete = (m: TeamMember) => setDel({ m, word: "", secret: "" });
+  const myMethod = me?.login_method ?? "password";
+  const myLength = me?.code_length ?? 6;
+  const delReady = !!del && del.word === "DELETE" && (myMethod === "code" ? del.secret.length === myLength : del.secret.length > 0);
 
   const onToggleActive = async (m: TeamMember) => {
     const active = !m.is_active;
@@ -418,7 +417,7 @@ export function StaffPage() {
                         variant="ghost"
                         title="Delete permanently"
                         className="text-red-400"
-                        onClick={() => void onDelete(m)}
+                        onClick={() => onDelete(m)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -434,6 +433,57 @@ export function StaffPage() {
           })}
         </Table>
       )}
+
+      {/* Delete account: type DELETE, then re-enter your own password / code */}
+      <Modal
+        open={!!del}
+        onClose={() => setDel(null)}
+        title="Delete this account?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDel(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!delReady}
+              loading={removeStaff.isPending}
+              onClick={() => del && removeStaff.mutate({ m: del.m, secret: del.secret })}
+            >
+              Delete permanently
+            </Button>
+          </>
+        }
+      >
+        {del && (
+          <div className="space-y-4">
+            <p className="text-sm text-amber-100/70">
+              {del.m.full_name} will be permanently deleted, along with their shifts. This can't be undone. To keep
+              their history, suspend them instead.
+            </p>
+            <Field label="Type DELETE to confirm">
+              <Input value={del.word} autoComplete="off" onChange={e => setDel({ ...del, word: e.target.value })} />
+            </Field>
+            <Field label={myMethod === "code" ? "Your access code" : "Your password"}>
+              {myMethod === "code" ? (
+                <OtpBoxes
+                  length={myLength}
+                  value={del.secret}
+                  onChange={v => setDel({ ...del, secret: v })}
+                  label="Your access code"
+                />
+              ) : (
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  value={del.secret}
+                  onChange={e => setDel({ ...del, secret: e.target.value })}
+                />
+              )}
+            </Field>
+          </div>
+        )}
+      </Modal>
 
       {/* Create / edit details */}
       <Modal

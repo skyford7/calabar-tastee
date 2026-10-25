@@ -268,10 +268,60 @@ async function handleUpdate(caller: Caller, body: unknown) {
   return json(200, { ok: true });
 }
 
+const MAX_DELETE_ATTEMPTS = 5;
+const DELETE_LOCK_MINUTES = 15;
+
+/** Re-checks the caller's own password / access code before a permanent delete. */
+async function verifyCallerSecret(db: SupabaseClient, caller: Caller, secret: string) {
+  const { data: p, error } = await db
+    .from("profiles")
+    .select("email, login_method, code_length, failed_attempts, locked_until")
+    .eq("id", caller.id)
+    .maybeSingle();
+  if (error || !p) throw new HttpError(500, "Could not verify your credentials.");
+  if (p.locked_until && new Date(p.locked_until).getTime() > Date.now()) {
+    throw new HttpError(423, "Too many failed attempts. Try again in a few minutes.");
+  }
+  const method = p.login_method as Method;
+  const shapeOk =
+    method === "password" ||
+    (/^\d+$/.test(secret) && (!p.code_length || secret.length === p.code_length));
+  let ok = false;
+  if (shapeOk) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anon) throw new HttpError(500, "Server is missing Supabase configuration.");
+    const anonDb = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error: signErr } = await anonDb.auth.signInWithPassword({
+      email: p.email,
+      password: authSecret(method, secret),
+    });
+    ok = !signErr && !!data.session;
+  }
+  if (!ok) {
+    const attempts = (p.failed_attempts ?? 0) + 1;
+    if (attempts >= MAX_DELETE_ATTEMPTS) {
+      const until = new Date(Date.now() + DELETE_LOCK_MINUTES * 60_000).toISOString();
+      await db.from("profiles").update({ failed_attempts: 0, locked_until: until }).eq("id", caller.id);
+      throw new HttpError(423, `Too many failed attempts. Locked for ${DELETE_LOCK_MINUTES} minutes.`);
+    }
+    await db.from("profiles").update({ failed_attempts: attempts }).eq("id", caller.id);
+    throw new HttpError(401, `Incorrect ${method === "code" ? "access code" : "password"}.`);
+  }
+  if (p.failed_attempts) await db.from("profiles").update({ failed_attempts: 0 }).eq("id", caller.id);
+}
+
 async function handleDelete(caller: Caller, body: unknown) {
-  const { user_id } = z.object({ user_id: z.string().uuid() }).parse(body);
+  const { user_id, secret } = z
+    .object({
+      user_id: z.string().uuid(),
+      secret: z.string().min(1).max(72),
+      confirm: z.literal("DELETE", { message: "Type DELETE to confirm." }),
+    })
+    .parse(body);
   if (user_id === caller.id) throw new HttpError(400, "You can't delete your own account.");
   const db = adminClient(caller.id);
+  await verifyCallerSecret(db, caller, secret);
   assertCanManage(caller, await roleOf(db, user_id));
   const { error } = await db.auth.admin.deleteUser(user_id);
   if (error) throw new HttpError(400, error.message);
