@@ -28,6 +28,7 @@ export type Announcement = {
   author_name: string;
   title: string;
   body: string;
+  image_url?: string | null;
   is_pinned: boolean;
   created_at: string;
   updated_at: string;

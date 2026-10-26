@@ -1,9 +1,10 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { MessageCircle, Megaphone, Pencil, Pin, PinOff, Send, Trash2 } from "lucide-react";
+import { ImagePlus, MessageCircle, Megaphone, Pencil, Pin, PinOff, Send, Trash2, X } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
-import { errorMessage, supabase } from "@/lib/supabase";
+import { MENU_IMAGES_BUCKET, errorMessage, supabase } from "@/lib/supabase";
+import { compressImage } from "@/lib/siteImages";
 import type { Announcement, AnnouncementComment } from "@/lib/types";
 import { Badge, Button, Card, Checkbox, EmptyState, ErrorBlock, Field, Input, LoadingBlock, Modal, PageHeader, Textarea, useConfirm } from "../ui";
 
@@ -165,6 +166,16 @@ function PostCard({
           </div>
           <h3 className="mt-2 text-lg font-semibold text-amber-100">{post.title}</h3>
           <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-amber-100/80">{post.body}</p>
+          {post.image_url && (
+            <a href={post.image_url} target="_blank" rel="noreferrer" className="mt-3 block">
+              <img
+                src={post.image_url}
+                alt=""
+                loading="lazy"
+                className="max-h-96 w-auto max-w-full rounded-lg border border-amber-900/40 object-contain"
+              />
+            </a>
+          )}
         </div>
         <div className="flex flex-shrink-0 gap-1">
           {manager && (
@@ -248,19 +259,50 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const [draft, setDraft] = useState({ title: "", body: "", pinned: false });
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!image) return setPreview(null);
+    const url = URL.createObjectURL(image);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
+
+  const pickImage = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast.error("Please choose an image file.");
+    if (file.size > 15 * 1024 * 1024) return toast.error("Images must be under 15 MB.");
+    setImage(file);
+  };
   const [editing, setEditing] = useState<{ id: number; title: string; body: string } | null>(null);
 
   const feed = useQuery({ queryKey: KEY, queryFn: fetchFeed, refetchInterval: 30_000 });
 
   const post = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("announcements")
-        .insert({ title: draft.title.trim(), body: draft.body.trim(), is_pinned: can.manageStaff && draft.pinned });
+      let image_url: string | undefined;
+      if (image) {
+        const blob = await compressImage(image, 1600, 0.85);
+        const ext = blob.type === "image/jpeg" ? "jpg" : (image.name.split(".").pop()?.toLowerCase() || "jpg");
+        const path = `center-net/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from(MENU_IMAGES_BUCKET)
+          .upload(path, blob, { cacheControl: "31536000", contentType: blob.type || image.type });
+        if (upErr) throw upErr;
+        image_url = supabase.storage.from(MENU_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+      const { error } = await supabase.from("announcements").insert({
+        title: draft.title.trim(),
+        body: draft.body.trim(),
+        is_pinned: can.manageStaff && draft.pinned,
+        ...(image_url ? { image_url } : {}),
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       setDraft({ title: "", body: "", pinned: false });
+      setImage(null);
       toast.success("Announcement posted");
       void qc.invalidateQueries({ queryKey: KEY });
     },
@@ -321,7 +363,33 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
             value={draft.body}
             onChange={e => setDraft({ ...draft, body: e.target.value })}
           />
+          {preview && (
+            <div className="relative inline-block">
+              <img src={preview} alt="Selected photo" className="max-h-48 rounded-lg border border-amber-900/40" />
+              <button
+                type="button"
+                onClick={() => setImage(null)}
+                aria-label="Remove photo"
+                className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              pickImage(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
           <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button type="button" variant="secondary" onClick={() => fileInput.current?.click()}>
+              <ImagePlus className="h-4 w-4" /> {image ? "Change photo" : "Add photo"}
+            </Button>
             {can.manageStaff ? (
               <Checkbox label="Pin to top" checked={draft.pinned} onChange={v => setDraft({ ...draft, pinned: v })} />
             ) : (
