@@ -10,6 +10,26 @@ import { Badge, Button, Card, Checkbox, EmptyState, ErrorBlock, Field, Input, Lo
 
 const KEY = ["center-net"] as const;
 
+/** Shrink and upload a photo to the shared image bucket; returns its public URL. */
+async function uploadPhoto(file: File): Promise<string> {
+  const blob = await compressImage(file, 1600, 0.85);
+  const ext = blob.type === "image/jpeg" ? "jpg" : (file.name.split(".").pop()?.toLowerCase() || "jpg");
+  const path = `center-net/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage
+    .from(MENU_IMAGES_BUCKET)
+    .upload(path, blob, { cacheControl: "31536000", contentType: blob.type || file.type });
+  if (error) throw error;
+  return supabase.storage.from(MENU_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+type EditState = {
+  id: number;
+  title: string;
+  body: string;
+  image_url: string | null;
+  newImage: File | null;
+};
+
 type Feed = { posts: Announcement[]; comments: Map<number, AnnouncementComment[]> };
 
 async function fetchFeed(): Promise<Feed> {
@@ -275,23 +295,21 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
     if (file.size > 15 * 1024 * 1024) return toast.error("Images must be under 15 MB.");
     setImage(file);
   };
-  const [editing, setEditing] = useState<{ id: number; title: string; body: string } | null>(null);
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const editFile = useRef<HTMLInputElement>(null);
+  const [editPreview, setEditPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!editing?.newImage) return setEditPreview(null);
+    const url = URL.createObjectURL(editing.newImage);
+    setEditPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [editing?.newImage]);
 
   const feed = useQuery({ queryKey: KEY, queryFn: fetchFeed, refetchInterval: 30_000 });
 
   const post = useMutation({
     mutationFn: async () => {
-      let image_url: string | undefined;
-      if (image) {
-        const blob = await compressImage(image, 1600, 0.85);
-        const ext = blob.type === "image/jpeg" ? "jpg" : (image.name.split(".").pop()?.toLowerCase() || "jpg");
-        const path = `center-net/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from(MENU_IMAGES_BUCKET)
-          .upload(path, blob, { cacheControl: "31536000", contentType: blob.type || image.type });
-        if (upErr) throw upErr;
-        image_url = supabase.storage.from(MENU_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
-      }
+      const image_url = image ? await uploadPhoto(image) : undefined;
       const { error } = await supabase.from("announcements").insert({
         title: draft.title.trim(),
         body: draft.body.trim(),
@@ -310,10 +328,11 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
   });
 
   const saveEdit = useMutation({
-    mutationFn: async (v: { id: number; title: string; body: string }) => {
+    mutationFn: async (v: EditState) => {
+      const image_url = v.newImage ? await uploadPhoto(v.newImage) : v.image_url;
       const { error } = await supabase
         .from("announcements")
-        .update({ title: v.title.trim(), body: v.body.trim() })
+        .update({ title: v.title.trim(), body: v.body.trim(), image_url })
         .eq("id", v.id);
       if (error) throw error;
     },
@@ -421,7 +440,7 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
               key={p.id}
               post={p}
               comments={feed.data.comments.get(p.id) ?? []}
-              onEdit={x => setEditing({ id: x.id, title: x.title, body: x.body })}
+              onEdit={x => setEditing({ id: x.id, title: x.title, body: x.body, image_url: x.image_url ?? null, newImage: null })}
             />
           ))}
         </div>
@@ -462,6 +481,44 @@ export function CenterNetFeed({ fallback }: { fallback: ReactNode }) {
                 value={editing.body}
                 onChange={e => setEditing({ ...editing, body: e.target.value })}
               />
+            </Field>
+            <Field label="Photo">
+              {(editPreview || editing.image_url) && (
+                <div className="relative mb-2 inline-block">
+                  <img
+                    src={editPreview ?? editing.image_url ?? ""}
+                    alt="Announcement photo"
+                    className="max-h-48 rounded-lg border border-amber-900/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditing({ ...editing, image_url: null, newImage: null })}
+                    aria-label="Remove photo"
+                    className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              <input
+                ref={editFile}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) return;
+                  if (!f.type.startsWith("image/")) return toast.error("Please choose an image file.");
+                  if (f.size > 15 * 1024 * 1024) return toast.error("Images must be under 15 MB.");
+                  setEditing({ ...editing, newImage: f });
+                }}
+              />
+              <div>
+                <Button type="button" variant="secondary" onClick={() => editFile.current?.click()}>
+                  <ImagePlus className="h-4 w-4" /> {editPreview || editing.image_url ? "Change photo" : "Add photo"}
+                </Button>
+              </div>
             </Field>
           </form>
         )}
