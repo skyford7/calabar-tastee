@@ -71,7 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["auth-member", userId],
     enabled: !!userId,
     queryFn: () => fetchMember(userId!),
-    staleTime: 5 * 60_000,
+    // Re-check often so a role change (or suspension) made by a manager reaches an open session
+    // within seconds instead of waiting for the next sign-in.
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: "always",
   });
 
   const signIn = useCallback(
