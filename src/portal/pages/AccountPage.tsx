@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthProvider";
 import { errorMessage, supabase } from "@/lib/supabase";
 import { ROLE_LABEL } from "@/lib/types";
+import { changeOwnEmail } from "@/lib/authApi";
 import { joinName, splitName, updateStaff } from "@/lib/staffApi";
 import { CredentialForm } from "../CredentialForm";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../ui";
@@ -14,6 +15,7 @@ export function AccountPage() {
     last_name: splitName(profile?.full_name).last,
     phone: profile?.phone ?? "",
     username: profile?.username ?? "",
+    email: profile?.email ?? "",
   }));
   const canRename = role === "admin" || role === "dba";
   const [savingDetails, setSavingDetails] = useState(false);
@@ -22,6 +24,15 @@ export function AccountPage() {
     e.preventDefault();
     if (!profile) return;
     setSavingDetails(true);
+    const newEmail = details.email.trim().toLowerCase();
+    if (newEmail && newEmail !== profile.email) {
+      try {
+        await changeOwnEmail(newEmail);
+      } catch (err) {
+        setSavingDetails(false);
+        return toast.error(errorMessage(err));
+      }
+    }
     const newName = details.username.trim().toLowerCase();
     if (canRename && newName && newName !== profile.username) {
       try {
@@ -60,7 +71,13 @@ export function AccountPage() {
               />
             </Field>
             <Field label="Email (for contact)">
-              <Input value={profile?.email ?? ""} disabled />
+              <Input
+                type="email"
+                required
+                maxLength={254}
+                value={details.email}
+                onChange={e => setDetails({ ...details, email: e.target.value })}
+              />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="First name">

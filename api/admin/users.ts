@@ -57,6 +57,7 @@ const updateSchema = z
   .object({
     user_id: z.string().uuid(),
     username: username.optional(),
+    email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254).optional(),
     role: z.enum(ROLES).optional(),
     is_active: z.boolean().optional(),
     credentials: credentials.optional(),
@@ -232,6 +233,22 @@ async function handleUpdate(caller: Caller, body: unknown) {
   if (input.username !== undefined) {
     await assertUsernameFree(db, input.username, input.user_id);
     patch.username = input.username;
+  }
+
+  if (input.email !== undefined) {
+    const { error } = await db.auth.admin.updateUserById(input.user_id, {
+      email: input.email,
+      email_confirm: true,
+    });
+    if (error) {
+      throw new HttpError(
+        400,
+        /already.*(registered|exists)|duplicate/i.test(error.message)
+          ? "Another account already uses that email."
+          : error.message
+      );
+    }
+    patch.email = input.email;
   }
 
   if (input.credentials) {

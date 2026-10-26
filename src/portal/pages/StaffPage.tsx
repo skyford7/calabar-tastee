@@ -167,6 +167,7 @@ export function StaffPage() {
         await updateStaff({
           user_id: f.id,
           username: f.username.trim().toLowerCase(),
+          email: f.email.trim().toLowerCase(),
           full_name: joinName(f.first_name, f.last_name),
           phone: f.phone || null,
           job_title: f.job_title || null,
@@ -550,7 +551,6 @@ export function StaffPage() {
               <Input
                 type="email"
                 required
-                disabled={!!form.id}
                 value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
               />

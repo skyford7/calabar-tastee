@@ -48,6 +48,14 @@ export async function changeOwnCredentials(method: LoginMethod, secret: string) 
   return post<{ ok: true }>({ action: "change", method, secret }, token);
 }
 
+/** The signed-in user changes their own contact email. */
+export async function changeOwnEmail(email: string) {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new LoginError("Your session has expired. Please sign in again.");
+  return post<{ ok: true }>({ action: "email", email }, token);
+}
+
 /** Local checks so people see mistakes before submitting. Returns an error message or null. */
 export function checkSecret(method: LoginMethod, secret: string, codeLength?: number | null): string | null {
   if (method === "code") {

@@ -18,6 +18,7 @@ export type CreateStaffInput = {
 export type UpdateStaffInput = {
   user_id: string;
   username?: string;
+  email?: string;
   role?: AppRole;
   is_active?: boolean;
   credentials?: Credentials;

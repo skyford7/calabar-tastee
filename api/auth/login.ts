@@ -265,6 +265,40 @@ async function handleChange(request: Request, body: unknown) {
   return json(200, { ok: true });
 }
 
+const emailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254),
+});
+
+/** The signed-in user changes their own contact email (sign-in is by username, so this is safe). */
+async function handleEmail(request: Request, body: unknown) {
+  const input = emailSchema.parse(body);
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new HttpError(401, "Not signed in.");
+
+  const db = serviceClient();
+  const { data, error } = await db.auth.getUser(token);
+  if (error || !data.user) throw new HttpError(401, "Your session has expired. Please sign in again.");
+
+  const { data: me } = await db.from("profiles").select("is_active").eq("id", data.user.id).maybeSingle();
+  if (!me?.is_active) throw new HttpError(403, SUSPENDED_MESSAGE);
+
+  const { error: upErr } = await db.auth.admin.updateUserById(data.user.id, {
+    email: input.email,
+    email_confirm: true,
+  });
+  if (upErr) {
+    throw new HttpError(
+      400,
+      /already.*(registered|exists)|duplicate/i.test(upErr.message)
+        ? "Another account already uses that email."
+        : upErr.message
+    );
+  }
+  const { error: pError } = await db.from("profiles").update({ email: input.email }).eq("id", data.user.id);
+  if (pError) throw new HttpError(400, pError.message);
+  return json(200, { ok: true });
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = (await request.json().catch(() => {
@@ -277,6 +311,8 @@ export async function POST(request: Request): Promise<Response> {
         return await handleLogin(body);
       case "change":
         return await handleChange(request, body);
+      case "email":
+        return await handleEmail(request, body);
       default:
         throw new HttpError(400, "Unknown action.");
     }
