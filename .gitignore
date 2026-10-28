@@ -26,11 +26,6 @@ dist-ssr
 .env
 .env.local
 .env.*.local
-# Database
-*.db
-*.sqlite
-*.sqlite3
-db/migrations/*.sql
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs
@@ -39,3 +34,6 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+
+# Vercel
+.vercel
