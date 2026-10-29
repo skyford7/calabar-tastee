@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#14100c"/>
-  <rect x="3.5" y="3.5" width="57" height="57" rx="11" fill="none" stroke="#d97706" stroke-width="3"/>
-  <text x="32" y="43" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="29" fill="#f59e0b">CT</text>
-</svg>
