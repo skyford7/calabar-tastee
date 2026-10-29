@@ -63,6 +63,15 @@ export type TimeOff = {
   reason: string;
 };
 
+export type Availability = {
+  id: number;
+  staff_id: string;
+  weekday: number | null; // 0 = Monday … 6 = Sunday
+  on_date: string | null; // YYYY-MM-DD
+  available: boolean;
+  note: string | null;
+};
+
 export type Category = {
   id: number;
   name: string;

@@ -24,6 +24,7 @@ import {
 } from "@/lib/format";
 import type { Shift } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { availabilityFor, useAvailability } from "@/lib/availability";
 import { HolidaysModal, RepeatShiftsModal, offFor, useTimeOff } from "../RosterTools";
 import {
   Badge,
@@ -70,6 +71,7 @@ export function RosterPage() {
     [directoryAll]
   );
   const timeOff = useTimeOff();
+  const availability = useAvailability();
   const [dayPick, setDayPick] = useState<string | null>(null);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [holidaysOpen, setHolidaysOpen] = useState(false);
@@ -252,11 +254,23 @@ export function RosterPage() {
   const renderCell = (p: { id: string; full_name: string }, d: string) => {
     const cell = byCell.get(`${p.id}|${d}`) ?? [];
     const off = offFor(timeOff.data ?? [], p.id, d);
+    const unavailable = !off && availabilityFor(availability.data ?? [], p.id, d) === false;
     return (
                         <div className="space-y-1">
       {off && (
         <div className="truncate rounded-md bg-sky-500/15 px-2 py-1.5 text-xs text-sky-200" title={off.reason}>
           {off.reason || "Holiday"}
+        </div>
+      )}
+      {unavailable && (
+        <div
+          className={cn(
+            "truncate rounded-md px-2 py-1.5 text-xs",
+            cell.length ? "bg-red-500/25 font-semibold text-red-200" : "bg-red-500/10 text-red-300/80"
+          )}
+          title="Marked as not available"
+        >
+          {cell.length ? "Not available!" : "Not available"}
         </div>
       )}
       {cell.map(s => (

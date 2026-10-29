@@ -10,6 +10,7 @@ export const qk = {
   team: ["team"] as const,
   directory: ["team_directory"] as const,
   timeOff: ["time_off"] as const,
+  availability: ["availability"] as const,
   shifts: (from: string, to: string) => ["shifts", from, to] as const,
   feedback: ["feedback"] as const,
   activity: ["activity_logs"] as const,

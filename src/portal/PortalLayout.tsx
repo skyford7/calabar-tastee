@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { NavLink, Outlet } from "react-router";
 import {
   Activity,
+  CalendarCheck,
   CalendarDays,
   ChefHat,
   Clock,
@@ -55,6 +56,12 @@ export function PortalLayout() {
       label: "Roster",
       icon: <CalendarDays className="h-4 w-4" />,
       show: can.viewRoster,
+    },
+    {
+      to: "/availability",
+      label: "Availability",
+      icon: <CalendarCheck className="h-4 w-4" />,
+      show: role !== "dba", // Database Administrators aren't rostered
     },
     {
       to: "/menu",

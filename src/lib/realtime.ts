@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 const WATCHED: { table: string; key: readonly string[] }[] = [
   { table: "shifts", key: ["shifts"] },
   { table: "time_off", key: ["time_off"] },
+  { table: "availability", key: ["availability"] },
   { table: "announcements", key: ["center-net"] },
   { table: "announcement_comments", key: ["center-net"] },
 ];
