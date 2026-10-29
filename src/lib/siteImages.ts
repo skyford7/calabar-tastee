@@ -23,7 +23,7 @@ export function storagePublicUrl(path: string): string {
 const BUNDLED = new Set([
   "about-image-1", "about-image-2", "abula", "afang-soup-new", "amstel-malt", "appletiser",
   "ayamase-ofada-stew", "ayamase", "bottled-water", "catfish-pepper-soup", "coca-cola",
-  "coconut-rice-new", "combo-deal", "customer-1", "customer-2", "customer-3", "customer-4", "eba",
+  "coconut-rice-new", "combo-deal", "vegan-combo", "customer-1", "customer-2", "customer-3", "customer-4", "eba",
   "edikaikong-new", "efo-riro-new", "egusi-soup-new", "ekpang-nkwkwo", "fanta", "founder",
   "fried-plantain", "fried-rice", "goat-head-isi-ewu", "grilled-chicken", "grilled-fish",
   "jollof-rice-plantain", "jollof-rice", "malta-guinness", "meatpie", "moi-moi-new",
