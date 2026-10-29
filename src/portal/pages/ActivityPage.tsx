@@ -23,6 +23,7 @@ const ENTITY_LABEL: Record<string, string> = {
   user_roles: "Role",
   profiles: "Account",
   opening_hours: "Opening hours",
+  availability: "Availability",
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -50,7 +51,25 @@ function show(field: string, v: unknown): string {
   return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 }
 
+const availText = (v: unknown) => (v === true ? "Available" : v === false ? "Not available" : "Not set");
+
+/** Availability entries read as plain sentences: "Mondays: Available → Not available". */
+function AvailabilitySummary({ log }: { log: ActivityLog }) {
+  const c = log.changes as { day?: string; was?: boolean | null; now?: boolean | null; note?: string | null; repeats?: boolean };
+  return (
+    <div className="text-amber-100/70">
+      <span className="text-amber-100/40">{c.repeats ? "Every week, " : "One-off, "}</span>
+      <span className="text-white">{c.day}</span>
+      <span className="text-amber-100/40">: </span>
+      {availText(c.was)} <span className="text-amber-500">→</span>{" "}
+      <span className="text-white">{availText(c.now)}</span>
+      {c.note && <span className="text-amber-100/50"> ({c.note})</span>}
+    </div>
+  );
+}
+
 function Summary({ log }: { log: ActivityLog }) {
+  if (log.entity === "availability") return <AvailabilitySummary log={log} />;
   if (log.action !== "update") {
     return (
       <span className="text-amber-100/50">

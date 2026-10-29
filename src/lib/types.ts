@@ -70,6 +70,7 @@ export type Availability = {
   on_date: string | null; // YYYY-MM-DD
   available: boolean;
   note: string | null;
+  updated_at?: string;
 };
 
 export type Category = {

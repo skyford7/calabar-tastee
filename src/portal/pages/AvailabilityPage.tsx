@@ -4,7 +4,7 @@ import { Check, Minus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthProvider";
 import { WEEKDAYS, useAvailability } from "@/lib/availability";
-import { addDays, formatDay, londonToday } from "@/lib/format";
+import { addDays, formatDateTime, formatDay, londonToday } from "@/lib/format";
 import { qk, useTeamDirectory } from "@/lib/queries";
 import { errorMessage, supabase } from "@/lib/supabase";
 import type { Availability } from "@/lib/types";
@@ -270,6 +270,12 @@ function Overview({
   const today = londonToday();
   const end = addDays(today, 27);
   const cell = (id: string, day: number) => all.find(a => a.staff_id === id && a.weekday === day);
+  const lastChanged = (id: string) =>
+    all
+      .filter(a => a.staff_id === id && a.updated_at)
+      .map(a => a.updated_at!)
+      .sort()
+      .at(-1);
   const offDays = (id: string) =>
     all.filter(a => a.staff_id === id && a.on_date && a.on_date >= today && a.on_date <= end && !a.available);
 
@@ -289,6 +295,7 @@ function Overview({
               </th>
             ))}
             <th className="px-4 py-3">Days off coming up</th>
+            <th className="px-4 py-3">Last changed</th>
           </tr>
         }
       >
@@ -324,6 +331,9 @@ function Overview({
                 ) : (
                   "–"
                 )}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-xs text-amber-100/60">
+                {lastChanged(p.id) ? formatDateTime(lastChanged(p.id)!) : "–"}
               </td>
             </tr>
           );
