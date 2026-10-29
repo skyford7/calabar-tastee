@@ -17,6 +17,7 @@ import { useCategories, useMenuItems, useOpeningHours } from "@/lib/queries";
 import { formatPrice, hhmm, londonNow } from "@/lib/format";
 import { menuImage, siteImage } from "@/lib/siteImages";
 import type { MenuItem, OpeningHours } from "@/lib/types";
+import { WinterDealPopup } from "./WinterDealPopup";
 
 // ---------------------------------------------------------------------------
 // Links (same as calabartastee.com, plus WhatsApp ordering)
@@ -364,6 +365,7 @@ export function HomePage() {
 
   return (
     <div className="site min-h-screen bg-[#1a1410]">
+      <WinterDealPopup />
       {/* Navigation */}
       <nav className="fixed left-0 right-0 top-0 z-50 bg-[#1a1410]/95 shadow-lg backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
